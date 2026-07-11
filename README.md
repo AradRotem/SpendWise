@@ -72,16 +72,6 @@ Provides a single access point for transaction data and separates the ViewModel 
 
 Contains the Room database, entities, and DAO interfaces used to store and retrieve transactions.
 
-## Current Screens
-
-### Add Transaction Screen
-
-Allows the user to create a new income or expense transaction by entering an amount, selecting a category and date, and adding an optional description.
-
-### Transactions List Screen
-
-Displays the saved transactions and automatically updates whenever a transaction is added or changed.
-
 ## Project Structure
 
 ```text
