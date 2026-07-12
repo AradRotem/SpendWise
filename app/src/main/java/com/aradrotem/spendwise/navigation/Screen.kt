@@ -6,4 +6,7 @@ sealed class Screen(val route: String) {
     data object Budgets : Screen("budgets")
     data object Settings : Screen("settings")
     data object AddTransaction : Screen("add_transaction")
+    data object EditTransaction : Screen("edit_transaction/{transactionId}") {
+        fun createRoute(transactionId: Long) = "edit_transaction/$transactionId"
+    }
 }

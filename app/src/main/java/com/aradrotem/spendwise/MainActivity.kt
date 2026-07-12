@@ -7,7 +7,7 @@ import androidx.activity.enableEdgeToEdge
 import com.aradrotem.spendwise.navigation.SpendWiseApp
 import com.aradrotem.spendwise.ui.theme.SpendWiseTheme
 
-class MainActivity : ComponentActivity() {
+class MainActivity git status: ComponentActivity() {
     override fun onCreate(savedInstanceState: Bundle?) {
         super.onCreate(savedInstanceState)
         enableEdgeToEdge()

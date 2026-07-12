@@ -15,5 +15,7 @@ class TransactionRepository(private val transactionDao: TransactionDao) {
 
     suspend fun insert(transaction: TransactionEntity): Long = transactionDao.insert(transaction)
 
+    suspend fun update(transaction: TransactionEntity) = transactionDao.update(transaction)
+
     suspend fun delete(transaction: TransactionEntity) = transactionDao.delete(transaction)
 }
