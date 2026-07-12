@@ -42,6 +42,7 @@ import androidx.lifecycle.viewmodel.compose.viewModel
 import com.aradrotem.spendwise.SpendWiseApplication
 import com.aradrotem.spendwise.data.local.TransactionCategory
 import com.aradrotem.spendwise.data.local.TransactionType
+import com.aradrotem.spendwise.data.local.categoriesForType
 import com.aradrotem.spendwise.ui.format.formatDate
 
 @OptIn(ExperimentalMaterial3Api::class)
@@ -137,6 +138,7 @@ fun AddTransactionScreen(
             CategoryField(
                 selected = uiState.category,
                 error = uiState.categoryError,
+                options = categoriesForType(uiState.type),
                 onCategorySelected = viewModel::onCategoryChange
             )
 
@@ -175,6 +177,7 @@ fun AddTransactionScreen(
 private fun CategoryField(
     selected: TransactionCategory?,
     error: String?,
+    options: List<TransactionCategory>,
     onCategorySelected: (TransactionCategory) -> Unit,
     modifier: Modifier = Modifier
 ) {
@@ -185,7 +188,7 @@ private fun CategoryField(
                 Text(selected?.name ?: "Select category")
             }
             DropdownMenu(expanded = expanded, onDismissRequest = { expanded = false }) {
-                TransactionCategory.entries.forEach { category ->
+                options.forEach { category ->
                     DropdownMenuItem(
                         text = { Text(category.name) },
                         onClick = {

@@ -7,6 +7,7 @@ import androidx.lifecycle.viewmodel.viewModelFactory
 import com.aradrotem.spendwise.data.local.TransactionCategory
 import com.aradrotem.spendwise.data.local.TransactionEntity
 import com.aradrotem.spendwise.data.local.TransactionType
+import com.aradrotem.spendwise.data.local.categoriesForType
 import com.aradrotem.spendwise.data.repository.TransactionRepository
 import com.aradrotem.spendwise.ui.format.formatAmountInCents
 import kotlinx.coroutines.CancellationException
@@ -48,7 +49,10 @@ class AddTransactionViewModel(
     }
 
     fun onTypeChange(type: TransactionType) {
-        _uiState.update { it.copy(type = type) }
+        _uiState.update { state ->
+            val validCategory = state.category?.takeIf { it in categoriesForType(type) }
+            state.copy(type = type, category = validCategory, categoryError = null)
+        }
     }
 
     fun onAmountChange(amountText: String) {
