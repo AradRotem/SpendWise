@@ -5,10 +5,15 @@ import androidx.room.Database
 import androidx.room.Room
 import androidx.room.RoomDatabase
 
-@Database(entities = [TransactionEntity::class], version = 1, exportSchema = false)
+@Database(
+    entities = [TransactionEntity::class, CategoryEntity::class],
+    version = 2,
+    exportSchema = false
+)
 abstract class SpendWiseDatabase : RoomDatabase() {
 
     abstract fun transactionDao(): TransactionDao
+    abstract fun categoryDao(): CategoryDao
 
     companion object {
         private const val DATABASE_NAME = "spendwise.db"
@@ -22,7 +27,10 @@ abstract class SpendWiseDatabase : RoomDatabase() {
                     context.applicationContext,
                     SpendWiseDatabase::class.java,
                     DATABASE_NAME
-                ).build().also { instance = it }
+                )
+                    .addMigrations(MIGRATION_1_2)
+                    .build()
+                    .also { instance = it }
             }
         }
     }

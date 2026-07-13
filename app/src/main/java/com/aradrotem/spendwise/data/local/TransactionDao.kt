@@ -30,4 +30,7 @@ interface TransactionDao {
 
     @Query("SELECT * FROM transactions WHERE id = :id")
     suspend fun getById(id: Long): TransactionEntity?
+
+    @Query("SELECT COUNT(*) FROM transactions WHERE category = :categoryName AND type = :type")
+    suspend fun countByCategoryAndType(categoryName: String, type: TransactionType): Int
 }

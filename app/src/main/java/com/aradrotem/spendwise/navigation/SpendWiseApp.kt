@@ -18,6 +18,7 @@ import androidx.navigation.compose.rememberNavController
 import androidx.navigation.navArgument
 import com.aradrotem.spendwise.ui.screens.AddTransactionScreen
 import com.aradrotem.spendwise.ui.screens.BudgetsScreen
+import com.aradrotem.spendwise.ui.screens.CategoriesScreen
 import com.aradrotem.spendwise.ui.screens.HomeScreen
 import com.aradrotem.spendwise.ui.screens.SettingsScreen
 import com.aradrotem.spendwise.ui.screens.TransactionsScreen
@@ -27,7 +28,8 @@ fun SpendWiseApp() {
     val navController = rememberNavController()
     val currentRoute = navController.currentBackStackEntryAsState().value?.destination?.route
     val showMainChrome = currentRoute != Screen.AddTransaction.route &&
-        currentRoute != Screen.EditTransaction.route
+        currentRoute != Screen.EditTransaction.route &&
+        currentRoute != Screen.Categories.route
 
     Scaffold(
         bottomBar = {
@@ -74,7 +76,14 @@ fun SpendWiseApp() {
                 )
             }
             composable(Screen.Budgets.route) { BudgetsScreen() }
-            composable(Screen.Settings.route) { SettingsScreen() }
+            composable(Screen.Settings.route) {
+                SettingsScreen(
+                    onNavigateToCategories = { navController.navigate(Screen.Categories.route) }
+                )
+            }
+            composable(Screen.Categories.route) {
+                CategoriesScreen(onBack = { navController.popBackStack() })
+            }
             composable(Screen.AddTransaction.route) {
                 AddTransactionScreen(
                     transactionId = null,

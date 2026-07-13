@@ -1,12 +1,11 @@
 package com.aradrotem.spendwise.ui.screens
 
-import com.aradrotem.spendwise.data.local.TransactionCategory
 import com.aradrotem.spendwise.data.local.TransactionType
 
 data class AddTransactionUiState(
     val type: TransactionType = TransactionType.EXPENSE,
     val amountText: String = "",
-    val category: TransactionCategory? = null,
+    val category: String? = null,
     val dateMillis: Long = System.currentTimeMillis(),
     val note: String = "",
     val amountError: String? = null,

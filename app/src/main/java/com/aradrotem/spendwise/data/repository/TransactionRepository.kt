@@ -2,6 +2,7 @@ package com.aradrotem.spendwise.data.repository
 
 import com.aradrotem.spendwise.data.local.TransactionDao
 import com.aradrotem.spendwise.data.local.TransactionEntity
+import com.aradrotem.spendwise.data.local.TransactionType
 import kotlinx.coroutines.flow.Flow
 
 class TransactionRepository(private val transactionDao: TransactionDao) {
@@ -12,6 +13,9 @@ class TransactionRepository(private val transactionDao: TransactionDao) {
         transactionDao.observeBetween(startTimestamp, endTimestamp)
 
     suspend fun getById(id: Long): TransactionEntity? = transactionDao.getById(id)
+
+    suspend fun countByCategoryAndType(categoryName: String, type: TransactionType): Int =
+        transactionDao.countByCategoryAndType(categoryName, type)
 
     suspend fun insert(transaction: TransactionEntity): Long = transactionDao.insert(transaction)
 

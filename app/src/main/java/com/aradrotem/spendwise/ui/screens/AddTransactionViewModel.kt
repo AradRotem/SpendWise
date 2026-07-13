@@ -4,26 +4,41 @@ import androidx.lifecycle.ViewModel
 import androidx.lifecycle.viewModelScope
 import androidx.lifecycle.viewmodel.initializer
 import androidx.lifecycle.viewmodel.viewModelFactory
-import com.aradrotem.spendwise.data.local.TransactionCategory
+import com.aradrotem.spendwise.data.local.CategoryEntity
 import com.aradrotem.spendwise.data.local.TransactionEntity
 import com.aradrotem.spendwise.data.local.TransactionType
-import com.aradrotem.spendwise.data.local.categoriesForType
+import com.aradrotem.spendwise.data.repository.CategoryRepository
 import com.aradrotem.spendwise.data.repository.TransactionRepository
 import com.aradrotem.spendwise.ui.format.formatAmountInCents
 import kotlinx.coroutines.CancellationException
+import kotlinx.coroutines.ExperimentalCoroutinesApi
 import kotlinx.coroutines.flow.MutableStateFlow
+import kotlinx.coroutines.flow.SharingStarted
 import kotlinx.coroutines.flow.StateFlow
 import kotlinx.coroutines.flow.asStateFlow
+import kotlinx.coroutines.flow.distinctUntilChanged
+import kotlinx.coroutines.flow.first
+import kotlinx.coroutines.flow.flatMapLatest
+import kotlinx.coroutines.flow.map
+import kotlinx.coroutines.flow.stateIn
 import kotlinx.coroutines.flow.update
 import kotlinx.coroutines.launch
 
 class AddTransactionViewModel(
     private val transactionRepository: TransactionRepository,
+    private val categoryRepository: CategoryRepository,
     private val transactionId: Long? = null
 ) : ViewModel() {
 
     private val _uiState = MutableStateFlow(AddTransactionUiState(isLoading = transactionId != null))
     val uiState: StateFlow<AddTransactionUiState> = _uiState.asStateFlow()
+
+    @OptIn(ExperimentalCoroutinesApi::class)
+    val availableCategories: StateFlow<List<CategoryEntity>> = _uiState
+        .map { it.type }
+        .distinctUntilChanged()
+        .flatMapLatest { type -> categoryRepository.observeByType(type) }
+        .stateIn(viewModelScope, SharingStarted.WhileSubscribed(5_000), emptyList())
 
     init {
         val id = transactionId
@@ -49,9 +64,12 @@ class AddTransactionViewModel(
     }
 
     fun onTypeChange(type: TransactionType) {
-        _uiState.update { state ->
-            val validCategory = state.category?.takeIf { it in categoriesForType(type) }
-            state.copy(type = type, category = validCategory, categoryError = null)
+        viewModelScope.launch {
+            val validCategoryNames = categoryRepository.observeByType(type).first().map { it.name }
+            _uiState.update { state ->
+                val validCategory = state.category?.takeIf { it in validCategoryNames }
+                state.copy(type = type, category = validCategory, categoryError = null)
+            }
         }
     }
 
@@ -59,7 +77,7 @@ class AddTransactionViewModel(
         _uiState.update { it.copy(amountText = amountText, amountError = null, saveError = null) }
     }
 
-    fun onCategoryChange(category: TransactionCategory) {
+    fun onCategoryChange(category: String) {
         _uiState.update { it.copy(category = category, categoryError = null, saveError = null) }
     }
 
@@ -131,8 +149,12 @@ class AddTransactionViewModel(
     }
 
     companion object {
-        fun factory(transactionRepository: TransactionRepository, transactionId: Long? = null) = viewModelFactory {
-            initializer { AddTransactionViewModel(transactionRepository, transactionId) }
+        fun factory(
+            transactionRepository: TransactionRepository,
+            categoryRepository: CategoryRepository,
+            transactionId: Long? = null
+        ) = viewModelFactory {
+            initializer { AddTransactionViewModel(transactionRepository, categoryRepository, transactionId) }
         }
     }
 }

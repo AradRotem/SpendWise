@@ -36,13 +36,13 @@ class TransactionDaoTest {
         val older = TransactionEntity(
             amountInCents = 500,
             type = TransactionType.EXPENSE,
-            category = TransactionCategory.FOOD,
+            category = "FOOD",
             timestamp = 1000L
         )
         val newer = TransactionEntity(
             amountInCents = 1200,
             type = TransactionType.INCOME,
-            category = TransactionCategory.SALARY,
+            category = "SALARY",
             timestamp = 2000L
         )
 

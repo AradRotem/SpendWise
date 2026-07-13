@@ -8,7 +8,7 @@ data class TransactionEntity(
     @PrimaryKey(autoGenerate = true) val id: Long = 0,
     val amountInCents: Long,
     val type: TransactionType,
-    val category: TransactionCategory,
+    val category: String,
     val timestamp: Long,
     val note: String = ""
 )

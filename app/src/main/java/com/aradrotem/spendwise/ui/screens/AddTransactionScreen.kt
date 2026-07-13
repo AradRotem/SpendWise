@@ -40,9 +40,7 @@ import androidx.compose.ui.text.input.KeyboardType
 import androidx.compose.ui.unit.dp
 import androidx.lifecycle.viewmodel.compose.viewModel
 import com.aradrotem.spendwise.SpendWiseApplication
-import com.aradrotem.spendwise.data.local.TransactionCategory
 import com.aradrotem.spendwise.data.local.TransactionType
-import com.aradrotem.spendwise.data.local.categoriesForType
 import com.aradrotem.spendwise.ui.format.formatDate
 
 @OptIn(ExperimentalMaterial3Api::class)
@@ -55,11 +53,13 @@ fun AddTransactionScreen(
     viewModel: AddTransactionViewModel = viewModel(
         factory = AddTransactionViewModel.factory(
             (LocalContext.current.applicationContext as SpendWiseApplication).transactionRepository,
+            (LocalContext.current.applicationContext as SpendWiseApplication).categoryRepository,
             transactionId
         )
     )
 ) {
     val uiState by viewModel.uiState.collectAsState()
+    val availableCategories by viewModel.availableCategories.collectAsState()
     val isEditMode = transactionId != null
 
     LaunchedEffect(uiState.isSaved) {
@@ -138,7 +138,7 @@ fun AddTransactionScreen(
             CategoryField(
                 selected = uiState.category,
                 error = uiState.categoryError,
-                options = categoriesForType(uiState.type),
+                options = availableCategories.map { it.name },
                 onCategorySelected = viewModel::onCategoryChange
             )
 
@@ -175,24 +175,24 @@ fun AddTransactionScreen(
 
 @Composable
 private fun CategoryField(
-    selected: TransactionCategory?,
+    selected: String?,
     error: String?,
-    options: List<TransactionCategory>,
-    onCategorySelected: (TransactionCategory) -> Unit,
+    options: List<String>,
+    onCategorySelected: (String) -> Unit,
     modifier: Modifier = Modifier
 ) {
     var expanded by remember { mutableStateOf(false) }
     Column(modifier = modifier.fillMaxWidth()) {
         Box {
             OutlinedButton(onClick = { expanded = true }, modifier = Modifier.fillMaxWidth()) {
-                Text(selected?.name ?: "Select category")
+                Text(selected ?: "Select category")
             }
             DropdownMenu(expanded = expanded, onDismissRequest = { expanded = false }) {
-                options.forEach { category ->
+                options.forEach { categoryName ->
                     DropdownMenuItem(
-                        text = { Text(category.name) },
+                        text = { Text(categoryName) },
                         onClick = {
-                            onCategorySelected(category)
+                            onCategorySelected(categoryName)
                             expanded = false
                         }
                     )

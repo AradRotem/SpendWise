@@ -112,7 +112,7 @@ private fun TransactionRow(transaction: TransactionEntity, modifier: Modifier = 
         horizontalArrangement = Arrangement.SpaceBetween
     ) {
         Column(modifier = Modifier.weight(1f)) {
-            Text(text = transaction.category.name, style = MaterialTheme.typography.bodyLarge)
+            Text(text = transaction.category, style = MaterialTheme.typography.bodyLarge)
             Text(text = formatDate(transaction.timestamp), style = MaterialTheme.typography.bodySmall)
             if (transaction.note.isNotBlank()) {
                 Text(text = transaction.note, style = MaterialTheme.typography.bodySmall)
