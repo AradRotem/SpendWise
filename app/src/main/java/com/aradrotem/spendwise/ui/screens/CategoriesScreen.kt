@@ -33,6 +33,7 @@ import androidx.lifecycle.viewmodel.compose.viewModel
 import com.aradrotem.spendwise.SpendWiseApplication
 import com.aradrotem.spendwise.data.local.CategoryEntity
 import com.aradrotem.spendwise.data.local.TransactionType
+import com.aradrotem.spendwise.util.formatCategoryDisplayName
 import kotlinx.coroutines.launch
 
 @OptIn(ExperimentalMaterial3Api::class)
@@ -43,7 +44,8 @@ fun CategoriesScreen(
     viewModel: CategoriesViewModel = viewModel(
         factory = CategoriesViewModel.factory(
             (LocalContext.current.applicationContext as SpendWiseApplication).categoryRepository,
-            (LocalContext.current.applicationContext as SpendWiseApplication).transactionRepository
+            (LocalContext.current.applicationContext as SpendWiseApplication).transactionRepository,
+            (LocalContext.current.applicationContext as SpendWiseApplication).budgetRepository
         )
     )
 ) {
@@ -56,10 +58,12 @@ fun CategoriesScreen(
 
     var categoryPendingDelete by remember { mutableStateOf<CategoryEntity?>(null) }
     var deleteImpactCount by remember { mutableStateOf(0) }
+    var deleteHasBudget by remember { mutableStateOf(false) }
 
     fun requestDelete(category: CategoryEntity) {
         coroutineScope.launch {
             deleteImpactCount = viewModel.countTransactionsUsing(category)
+            deleteHasBudget = viewModel.hasBudget(category)
             categoryPendingDelete = category
         }
     }
@@ -146,8 +150,9 @@ fun CategoriesScreen(
 
     categoryPendingDelete?.let { category ->
         DeleteCategoryDialog(
-            categoryName = category.name,
+            categoryName = formatCategoryDisplayName(category.name),
             affectedCount = deleteImpactCount,
+            hasBudget = deleteHasBudget,
             onConfirm = {
                 viewModel.deleteCategory(category)
                 categoryPendingDelete = null
@@ -189,7 +194,7 @@ private fun CategoryRow(
         horizontalArrangement = Arrangement.SpaceBetween,
         verticalAlignment = Alignment.CenterVertically
     ) {
-        Text(text = category.name)
+        Text(text = formatCategoryDisplayName(category.name))
         if (category.isBuiltIn) {
             Text(
                 text = "Built-in",
@@ -244,23 +249,14 @@ private fun AddCategoryDialog(
 private fun DeleteCategoryDialog(
     categoryName: String,
     affectedCount: Int,
+    hasBudget: Boolean,
     onConfirm: () -> Unit,
     onDismiss: () -> Unit
 ) {
     AlertDialog(
         onDismissRequest = onDismiss,
         title = { Text("Delete category?") },
-        text = {
-            Text(
-                if (affectedCount > 0) {
-                    val noun = if (affectedCount == 1) "transaction" else "transactions"
-                    val pronoun = if (affectedCount == 1) "that transaction" else "those transactions"
-                    "This category is used by $affectedCount $noun. Deleting it will move $pronoun to OTHER. Continue?"
-                } else {
-                    "Delete \"$categoryName\"? This action cannot be undone."
-                }
-            )
-        },
+        text = { Text(buildDeleteCategoryMessage(categoryName, affectedCount, hasBudget)) },
         confirmButton = {
             TextButton(onClick = onConfirm) {
                 Text("Delete", color = MaterialTheme.colorScheme.error)
@@ -272,4 +268,21 @@ private fun DeleteCategoryDialog(
             }
         }
     )
+}
+
+private fun buildDeleteCategoryMessage(categoryName: String, affectedCount: Int, hasBudget: Boolean): String {
+    val sentences = mutableListOf<String>()
+    if (affectedCount > 0) {
+        val noun = if (affectedCount == 1) "transaction" else "transactions"
+        val pronoun = if (affectedCount == 1) "that transaction" else "those transactions"
+        sentences += "This category is used by $affectedCount $noun. Deleting it will move $pronoun to OTHER."
+    }
+    if (hasBudget) {
+        sentences += "Its monthly budget will also be deleted."
+    }
+    if (sentences.isEmpty()) {
+        sentences += "Delete \"$categoryName\"?"
+    }
+    sentences += "This action cannot be undone."
+    return sentences.joinToString(" ")
 }

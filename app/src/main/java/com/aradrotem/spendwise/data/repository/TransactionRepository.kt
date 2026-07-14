@@ -1,5 +1,6 @@
 package com.aradrotem.spendwise.data.repository
 
+import com.aradrotem.spendwise.data.local.CategoryMonthlyTotal
 import com.aradrotem.spendwise.data.local.TransactionDao
 import com.aradrotem.spendwise.data.local.TransactionEntity
 import com.aradrotem.spendwise.data.local.TransactionType
@@ -11,6 +12,9 @@ class TransactionRepository(private val transactionDao: TransactionDao) {
 
     fun observeBetween(startTimestamp: Long, endTimestamp: Long): Flow<List<TransactionEntity>> =
         transactionDao.observeBetween(startTimestamp, endTimestamp)
+
+    fun observeExpenseTotalsByCategory(startTimestamp: Long, endTimestamp: Long): Flow<List<CategoryMonthlyTotal>> =
+        transactionDao.observeExpenseTotalsByCategory(startTimestamp, endTimestamp)
 
     suspend fun getById(id: Long): TransactionEntity? = transactionDao.getById(id)
 

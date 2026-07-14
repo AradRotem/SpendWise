@@ -34,6 +34,7 @@ import com.aradrotem.spendwise.data.local.TransactionEntity
 import com.aradrotem.spendwise.data.local.TransactionType
 import com.aradrotem.spendwise.ui.format.formatAmountInCents
 import com.aradrotem.spendwise.ui.format.formatDate
+import com.aradrotem.spendwise.util.formatCategoryDisplayName
 
 @OptIn(ExperimentalFoundationApi::class)
 @Composable
@@ -112,7 +113,7 @@ private fun TransactionRow(transaction: TransactionEntity, modifier: Modifier = 
         horizontalArrangement = Arrangement.SpaceBetween
     ) {
         Column(modifier = Modifier.weight(1f)) {
-            Text(text = transaction.category, style = MaterialTheme.typography.bodyLarge)
+            Text(text = formatCategoryDisplayName(transaction.category), style = MaterialTheme.typography.bodyLarge)
             Text(text = formatDate(transaction.timestamp), style = MaterialTheme.typography.bodySmall)
             if (transaction.note.isNotBlank()) {
                 Text(text = transaction.note, style = MaterialTheme.typography.bodySmall)

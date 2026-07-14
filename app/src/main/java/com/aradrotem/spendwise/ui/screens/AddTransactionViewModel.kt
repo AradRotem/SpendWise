@@ -10,6 +10,8 @@ import com.aradrotem.spendwise.data.local.TransactionType
 import com.aradrotem.spendwise.data.repository.CategoryRepository
 import com.aradrotem.spendwise.data.repository.TransactionRepository
 import com.aradrotem.spendwise.ui.format.formatAmountInCents
+import com.aradrotem.spendwise.ui.format.hasTooManyDecimalPlaces
+import com.aradrotem.spendwise.ui.format.parseAmountToCents
 import kotlinx.coroutines.CancellationException
 import kotlinx.coroutines.ExperimentalCoroutinesApi
 import kotlinx.coroutines.flow.MutableStateFlow
@@ -96,6 +98,7 @@ class AddTransactionViewModel(
         val amountInCents = parseAmountToCents(state.amountText)
         val amountError = when {
             state.amountText.isBlank() -> "Amount is required"
+            hasTooManyDecimalPlaces(state.amountText) -> "Enter an amount with up to 2 decimal places."
             amountInCents == null -> "Enter a valid amount"
             amountInCents <= 0L -> "Amount must be greater than zero"
             else -> null
@@ -157,25 +160,4 @@ class AddTransactionViewModel(
             initializer { AddTransactionViewModel(transactionRepository, categoryRepository, transactionId) }
         }
     }
-}
-
-// Parses decimal text directly into cents to avoid Double/Float rounding on money.
-private fun parseAmountToCents(text: String): Long? {
-    val trimmed = text.trim()
-    if (trimmed.isEmpty()) return null
-
-    val normalized = trimmed.replace(',', '.')
-    val parts = normalized.split(".")
-    if (parts.size > 2) return null
-
-    val wholeDigits = parts[0].ifEmpty { "0" }
-    val fractionDigits = if (parts.size == 2) parts[1] else ""
-
-    if (!wholeDigits.all { it.isDigit() }) return null
-    if (fractionDigits.length > 2 || !fractionDigits.all { it.isDigit() }) return null
-
-    val whole = wholeDigits.toLongOrNull() ?: return null
-    val fraction = fractionDigits.padEnd(2, '0').toLongOrNull() ?: return null
-
-    return whole * 100 + fraction
 }

@@ -5,6 +5,7 @@ import com.aradrotem.spendwise.data.local.CategoryDao
 import com.aradrotem.spendwise.data.local.CategoryEntity
 import com.aradrotem.spendwise.data.local.TransactionType
 import com.aradrotem.spendwise.data.local.builtInCategorySeeds
+import com.aradrotem.spendwise.util.formatCategoryDisplayName
 import kotlinx.coroutines.flow.Flow
 
 class CategoryRepository(private val categoryDao: CategoryDao) {
@@ -23,7 +24,7 @@ class CategoryRepository(private val categoryDao: CategoryDao) {
         }
         categoryDao.insert(
             CategoryEntity(
-                name = trimmed,
+                name = formatCategoryDisplayName(trimmed),
                 normalizedName = normalized,
                 type = type,
                 isBuiltIn = false

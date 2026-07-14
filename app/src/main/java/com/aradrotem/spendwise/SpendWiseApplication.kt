@@ -2,6 +2,7 @@ package com.aradrotem.spendwise
 
 import android.app.Application
 import com.aradrotem.spendwise.data.local.SpendWiseDatabase
+import com.aradrotem.spendwise.data.repository.BudgetRepository
 import com.aradrotem.spendwise.data.repository.CategoryRepository
 import com.aradrotem.spendwise.data.repository.TransactionRepository
 import kotlinx.coroutines.CoroutineScope
@@ -21,6 +22,10 @@ class SpendWiseApplication : Application() {
 
     val categoryRepository: CategoryRepository by lazy {
         CategoryRepository(database.categoryDao())
+    }
+
+    val budgetRepository: BudgetRepository by lazy {
+        BudgetRepository(database.budgetDao())
     }
 
     override fun onCreate() {

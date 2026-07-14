@@ -27,13 +27,16 @@ import com.aradrotem.spendwise.ui.screens.TransactionsScreen
 fun SpendWiseApp() {
     val navController = rememberNavController()
     val currentRoute = navController.currentBackStackEntryAsState().value?.destination?.route
-    val showMainChrome = currentRoute != Screen.AddTransaction.route &&
+    val showBottomBar = currentRoute != Screen.AddTransaction.route &&
         currentRoute != Screen.EditTransaction.route &&
         currentRoute != Screen.Categories.route
+    // The Budgets screen has its own "Add budget" action, so the global "Add transaction" FAB
+    // is hidden there to avoid two competing add actions.
+    val showFab = showBottomBar && currentRoute != Screen.Budgets.route
 
     Scaffold(
         bottomBar = {
-            if (showMainChrome) {
+            if (showBottomBar) {
                 NavigationBar {
                     bottomNavItems.forEach { item ->
                         NavigationBarItem(
@@ -55,7 +58,7 @@ fun SpendWiseApp() {
             }
         },
         floatingActionButton = {
-            if (showMainChrome) {
+            if (showFab) {
                 FloatingActionButton(onClick = { navController.navigate(Screen.AddTransaction.route) }) {
                     Text("+")
                 }

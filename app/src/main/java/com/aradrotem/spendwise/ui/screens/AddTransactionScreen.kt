@@ -15,8 +15,6 @@ import androidx.compose.material3.Button
 import androidx.compose.material3.CircularProgressIndicator
 import androidx.compose.material3.DatePicker
 import androidx.compose.material3.DatePickerDialog
-import androidx.compose.material3.DropdownMenu
-import androidx.compose.material3.DropdownMenuItem
 import androidx.compose.material3.ExperimentalMaterial3Api
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.OutlinedButton
@@ -41,6 +39,7 @@ import androidx.compose.ui.unit.dp
 import androidx.lifecycle.viewmodel.compose.viewModel
 import com.aradrotem.spendwise.SpendWiseApplication
 import com.aradrotem.spendwise.data.local.TransactionType
+import com.aradrotem.spendwise.ui.components.CategoryDropdownField
 import com.aradrotem.spendwise.ui.format.formatDate
 
 @OptIn(ExperimentalMaterial3Api::class)
@@ -135,7 +134,7 @@ fun AddTransactionScreen(
                 modifier = Modifier.fillMaxWidth()
             )
 
-            CategoryField(
+            CategoryDropdownField(
                 selected = uiState.category,
                 error = uiState.categoryError,
                 options = availableCategories.map { it.name },
@@ -169,42 +168,6 @@ fun AddTransactionScreen(
                     Text(if (isEditMode) "Update" else "Save")
                 }
             }
-        }
-    }
-}
-
-@Composable
-private fun CategoryField(
-    selected: String?,
-    error: String?,
-    options: List<String>,
-    onCategorySelected: (String) -> Unit,
-    modifier: Modifier = Modifier
-) {
-    var expanded by remember { mutableStateOf(false) }
-    Column(modifier = modifier.fillMaxWidth()) {
-        Box {
-            OutlinedButton(onClick = { expanded = true }, modifier = Modifier.fillMaxWidth()) {
-                Text(selected ?: "Select category")
-            }
-            DropdownMenu(expanded = expanded, onDismissRequest = { expanded = false }) {
-                options.forEach { categoryName ->
-                    DropdownMenuItem(
-                        text = { Text(categoryName) },
-                        onClick = {
-                            onCategorySelected(categoryName)
-                            expanded = false
-                        }
-                    )
-                }
-            }
-        }
-        if (error != null) {
-            Text(
-                text = error,
-                color = MaterialTheme.colorScheme.error,
-                style = MaterialTheme.typography.bodySmall
-            )
         }
     }
 }

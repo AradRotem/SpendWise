@@ -33,4 +33,17 @@ interface TransactionDao {
 
     @Query("SELECT COUNT(*) FROM transactions WHERE category = :categoryName AND type = :type")
     suspend fun countByCategoryAndType(categoryName: String, type: TransactionType): Int
+
+    // One grouped query for all budgets' monthly spend, instead of one query per budget.
+    @Query(
+        "SELECT category, SUM(amountInCents) AS totalCents FROM transactions " +
+            "WHERE type = 'EXPENSE' AND timestamp BETWEEN :startTimestamp AND :endTimestamp " +
+            "GROUP BY category"
+    )
+    fun observeExpenseTotalsByCategory(startTimestamp: Long, endTimestamp: Long): Flow<List<CategoryMonthlyTotal>>
 }
+
+data class CategoryMonthlyTotal(
+    val category: String,
+    val totalCents: Long
+)

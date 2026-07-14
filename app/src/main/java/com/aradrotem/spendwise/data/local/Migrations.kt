@@ -48,3 +48,20 @@ val MIGRATION_1_2: Migration = object : Migration(1, 2) {
         }
     }
 }
+
+// Adds the budgets table. Non-destructive: only creates new schema objects, does not touch
+// existing transactions/categories data, and does not seed any default budget rows.
+val MIGRATION_2_3: Migration = object : Migration(2, 3) {
+    override fun migrate(connection: SQLiteConnection) {
+        connection.execSQL(
+            "CREATE TABLE IF NOT EXISTS `budgets` (" +
+                "`id` INTEGER PRIMARY KEY AUTOINCREMENT NOT NULL, " +
+                "`categoryName` TEXT NOT NULL, " +
+                "`monthlyLimitCents` INTEGER NOT NULL)"
+        )
+        connection.execSQL(
+            "CREATE UNIQUE INDEX IF NOT EXISTS `index_budgets_categoryName` " +
+                "ON `budgets` (`categoryName`)"
+        )
+    }
+}

@@ -6,6 +6,7 @@ import androidx.lifecycle.viewmodel.initializer
 import androidx.lifecycle.viewmodel.viewModelFactory
 import com.aradrotem.spendwise.data.local.CategoryEntity
 import com.aradrotem.spendwise.data.local.TransactionType
+import com.aradrotem.spendwise.data.repository.BudgetRepository
 import com.aradrotem.spendwise.data.repository.CategoryRepository
 import com.aradrotem.spendwise.data.repository.TransactionRepository
 import kotlinx.coroutines.flow.SharingStarted
@@ -16,7 +17,8 @@ import kotlinx.coroutines.launch
 
 class CategoriesViewModel(
     private val categoryRepository: CategoryRepository,
-    private val transactionRepository: TransactionRepository
+    private val transactionRepository: TransactionRepository,
+    private val budgetRepository: BudgetRepository
 ) : ViewModel() {
 
     val uiState: StateFlow<CategoriesUiState> = combine(
@@ -37,6 +39,9 @@ class CategoriesViewModel(
     suspend fun countTransactionsUsing(category: CategoryEntity): Int =
         transactionRepository.countByCategoryAndType(category.name, category.type)
 
+    suspend fun hasBudget(category: CategoryEntity): Boolean =
+        category.type == TransactionType.EXPENSE && budgetRepository.findByCategory(category.name) != null
+
     fun deleteCategory(category: CategoryEntity) {
         viewModelScope.launch {
             categoryRepository.deleteCustomCategory(category)
@@ -44,9 +49,12 @@ class CategoriesViewModel(
     }
 
     companion object {
-        fun factory(categoryRepository: CategoryRepository, transactionRepository: TransactionRepository) =
-            viewModelFactory {
-                initializer { CategoriesViewModel(categoryRepository, transactionRepository) }
-            }
+        fun factory(
+            categoryRepository: CategoryRepository,
+            transactionRepository: TransactionRepository,
+            budgetRepository: BudgetRepository
+        ) = viewModelFactory {
+            initializer { CategoriesViewModel(categoryRepository, transactionRepository, budgetRepository) }
+        }
     }
 }
