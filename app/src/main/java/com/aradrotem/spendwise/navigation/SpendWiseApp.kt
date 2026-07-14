@@ -70,7 +70,12 @@ fun SpendWiseApp() {
             startDestination = Screen.Home.route,
             modifier = Modifier.padding(innerPadding)
         ) {
-            composable(Screen.Home.route) { HomeScreen() }
+            composable(Screen.Home.route) {
+                HomeScreen(
+                    onNavigateToBudgets = { navController.navigate(Screen.Budgets.route) },
+                    onViewAllTransactions = { navController.navigate(Screen.Transactions.route) }
+                )
+            }
             composable(Screen.Transactions.route) {
                 TransactionsScreen(
                     onEditTransaction = { transactionId ->

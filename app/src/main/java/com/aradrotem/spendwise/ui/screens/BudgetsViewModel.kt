@@ -13,9 +13,7 @@ import com.aradrotem.spendwise.ui.format.formatAmountInCents
 import com.aradrotem.spendwise.ui.format.hasTooManyDecimalPlaces
 import com.aradrotem.spendwise.ui.format.parseAmountToCents
 import com.aradrotem.spendwise.util.compareCategoryNames
-import java.time.LocalDate
-import java.time.LocalTime
-import java.time.ZoneId
+import com.aradrotem.spendwise.util.currentMonthRange
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.SharingStarted
 import kotlinx.coroutines.flow.StateFlow
@@ -52,10 +50,10 @@ class BudgetsViewModel(
     )
 
     private fun budgetProgressFlow() = run {
-        val (startMillis, endMillis) = currentMonthMillisRange()
+        val range = currentMonthRange()
         combine(
             budgetRepository.observeAll(),
-            transactionRepository.observeExpenseTotalsByCategory(startMillis, endMillis)
+            transactionRepository.observeExpenseTotalsByCategory(range.startMillis, range.endExclusiveMillis)
         ) { budgets, totals ->
             val totalsByCategory = totals.associateBy({ it.category }, { it.totalCents })
             budgets
@@ -152,16 +150,4 @@ class BudgetsViewModel(
             initializer { BudgetsViewModel(budgetRepository, categoryRepository, transactionRepository) }
         }
     }
-}
-
-// Device-local calendar month boundaries, consistent with how transaction timestamps are stored.
-private fun currentMonthMillisRange(zoneId: ZoneId = ZoneId.systemDefault()): Pair<Long, Long> {
-    val today = LocalDate.now(zoneId)
-    val startMillis = today.withDayOfMonth(1).atStartOfDay(zoneId).toInstant().toEpochMilli()
-    val endMillis = today.withDayOfMonth(today.lengthOfMonth())
-        .atTime(LocalTime.MAX)
-        .atZone(zoneId)
-        .toInstant()
-        .toEpochMilli()
-    return startMillis to endMillis
 }
