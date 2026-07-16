@@ -65,7 +65,16 @@ fun TransactionsScreen(
                             transaction = transaction,
                             modifier = Modifier.combinedClickable(
                                 onClick = {},
-                                onLongClick = { actionTransaction = transaction }
+                                // Automatically generated payments are read-only in this step:
+                                // editing them through the manual-transaction form would silently
+                                // drop their recurring-plan link (Add Transaction has no fields
+                                // for it), and deleting one could let it be regenerated on the
+                                // next run. Both are deferred to Step 11's plan-aware editing.
+                                onLongClick = {
+                                    if (!transaction.isAutomaticallyGenerated) {
+                                        actionTransaction = transaction
+                                    }
+                                }
                             )
                         )
                         HorizontalDivider()

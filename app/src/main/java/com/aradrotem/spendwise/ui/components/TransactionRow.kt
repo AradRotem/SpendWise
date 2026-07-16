@@ -25,7 +25,10 @@ fun TransactionRow(transaction: TransactionEntity, modifier: Modifier = Modifier
         horizontalArrangement = Arrangement.SpaceBetween
     ) {
         Column(modifier = Modifier.weight(1f)) {
-            Text(text = formatCategoryDisplayName(transaction.category), style = MaterialTheme.typography.bodyLarge)
+            Text(text = transactionPrimaryText(transaction), style = MaterialTheme.typography.bodyLarge)
+            transactionSecondaryText(transaction)?.let {
+                Text(text = it, style = MaterialTheme.typography.bodySmall)
+            }
             Text(text = formatDate(transaction.timestamp), style = MaterialTheme.typography.bodySmall)
             if (transaction.note.isNotBlank()) {
                 Text(text = transaction.note, style = MaterialTheme.typography.bodySmall)
@@ -41,5 +44,32 @@ fun TransactionRow(transaction: TransactionEntity, modifier: Modifier = Modifier
             color = amountColor,
             style = MaterialTheme.typography.bodyLarge
         )
+    }
+}
+
+// Primary title for a transaction row: the recurring-plan title snapshot when present and
+// non-blank (see TransactionEntity.sourceTitle - never re-read from the live plan, so a later
+// rename/delete never changes historical rows), otherwise the category. Extracted as a pure,
+// Compose-free function so this fallback is directly unit-testable.
+fun transactionPrimaryText(transaction: TransactionEntity): String =
+    transaction.sourceTitle
+        ?.takeIf { it.isNotBlank() }
+        ?: formatCategoryDisplayName(transaction.category)
+
+// Secondary line shown under the primary title for automatically generated transactions only:
+// "<Category> · <Recurring expense/income, or Installment X of Y>". Null (no line) for manual
+// transactions, which keep their original category-only appearance.
+fun transactionSecondaryText(transaction: TransactionEntity): String? {
+    if (!transaction.isAutomaticallyGenerated) return null
+    return "${formatCategoryDisplayName(transaction.category)} · ${recurringLabel(transaction)}"
+}
+
+private fun recurringLabel(transaction: TransactionEntity): String {
+    val installmentNumber = transaction.installmentNumber
+    val totalInstallments = transaction.totalInstallments
+    return when {
+        installmentNumber != null && totalInstallments != null -> "Installment $installmentNumber of $totalInstallments"
+        transaction.type == TransactionType.INCOME -> "Recurring income"
+        else -> "Recurring expense"
     }
 }

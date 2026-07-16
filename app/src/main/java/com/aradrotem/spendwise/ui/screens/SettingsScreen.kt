@@ -13,7 +13,11 @@ import androidx.compose.ui.Modifier
 import androidx.compose.ui.unit.dp
 
 @Composable
-fun SettingsScreen(onNavigateToCategories: () -> Unit, modifier: Modifier = Modifier) {
+fun SettingsScreen(
+    onNavigateToCategories: () -> Unit,
+    onNavigateToRecurringPayments: () -> Unit,
+    modifier: Modifier = Modifier
+) {
     Column(modifier = modifier.fillMaxSize()) {
         Text(text = "Settings", modifier = Modifier.padding(16.dp))
         HorizontalDivider()
@@ -23,6 +27,13 @@ fun SettingsScreen(onNavigateToCategories: () -> Unit, modifier: Modifier = Modi
             modifier = Modifier
                 .fillMaxWidth()
                 .clickable(onClick = onNavigateToCategories)
+        )
+        ListItem(
+            headlineContent = { Text("Recurring Transactions") },
+            supportingContent = { Text("Manage monthly expenses, salary, and installment purchases") },
+            modifier = Modifier
+                .fillMaxWidth()
+                .clickable(onClick = onNavigateToRecurringPayments)
         )
     }
 }

@@ -10,9 +10,12 @@ import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.rememberScrollState
 import androidx.compose.foundation.verticalScroll
 import androidx.compose.material3.AlertDialog
+import androidx.compose.material3.Button
 import androidx.compose.material3.CircularProgressIndicator
 import androidx.compose.material3.ExperimentalMaterial3Api
+import androidx.compose.material3.FloatingActionButton
 import androidx.compose.material3.MaterialTheme
+import androidx.compose.material3.OutlinedButton
 import androidx.compose.material3.OutlinedTextField
 import androidx.compose.material3.Scaffold
 import androidx.compose.material3.Text
@@ -52,7 +55,8 @@ fun CategoriesScreen(
     val uiState by viewModel.uiState.collectAsState()
     val coroutineScope = rememberCoroutineScope()
 
-    var addDialogType by remember { mutableStateOf<TransactionType?>(null) }
+    var showAddDialog by remember { mutableStateOf(false) }
+    var addDialogType by remember { mutableStateOf(TransactionType.EXPENSE) }
     var addCategoryName by remember { mutableStateOf("") }
     var addCategoryError by remember { mutableStateOf<String?>(null) }
 
@@ -79,6 +83,21 @@ fun CategoriesScreen(
                     }
                 }
             )
+        },
+        floatingActionButton = {
+            // One persistent, obvious add action (spec: don't rely on a button at the bottom of
+            // a long category list) - stays reachable regardless of scroll position or how many
+            // categories exist.
+            FloatingActionButton(
+                onClick = {
+                    addDialogType = TransactionType.EXPENSE
+                    addCategoryName = ""
+                    addCategoryError = null
+                    showAddDialog = true
+                }
+            ) {
+                Text("+")
+            }
         }
     ) { innerPadding ->
         if (uiState.isLoading) {
@@ -100,30 +119,24 @@ fun CategoriesScreen(
                 CategoryGroup(
                     title = "Income",
                     categories = uiState.incomeCategories,
-                    onAddClick = {
-                        addDialogType = TransactionType.INCOME
-                        addCategoryName = ""
-                        addCategoryError = null
-                    },
                     onDeleteClick = ::requestDelete
                 )
                 CategoryGroup(
                     title = "Expense",
                     categories = uiState.expenseCategories,
-                    onAddClick = {
-                        addDialogType = TransactionType.EXPENSE
-                        addCategoryName = ""
-                        addCategoryError = null
-                    },
                     onDeleteClick = ::requestDelete
                 )
             }
         }
     }
 
-    addDialogType?.let { type ->
+    if (showAddDialog) {
         AddCategoryDialog(
-            type = type,
+            type = addDialogType,
+            onTypeChange = {
+                addDialogType = it
+                addCategoryError = null
+            },
             name = addCategoryName,
             onNameChange = {
                 addCategoryName = it
@@ -135,16 +148,16 @@ fun CategoriesScreen(
                     addCategoryError = "Category name is required"
                 } else {
                     coroutineScope.launch {
-                        val error = viewModel.addCategory(addCategoryName, type)
+                        val error = viewModel.addCategory(addCategoryName, addDialogType)
                         if (error == null) {
-                            addDialogType = null
+                            showAddDialog = false
                         } else {
                             addCategoryError = error
                         }
                     }
                 }
             },
-            onDismiss = { addDialogType = null }
+            onDismiss = { showAddDialog = false }
         )
     }
 
@@ -166,17 +179,20 @@ fun CategoriesScreen(
 private fun CategoryGroup(
     title: String,
     categories: List<CategoryEntity>,
-    onAddClick: () -> Unit,
     onDeleteClick: (CategoryEntity) -> Unit,
     modifier: Modifier = Modifier
 ) {
     Column(modifier = modifier.fillMaxWidth()) {
         Text(text = title, style = MaterialTheme.typography.titleMedium)
+        if (categories.isEmpty()) {
+            Text(
+                text = "No $title categories yet",
+                style = MaterialTheme.typography.bodySmall,
+                color = MaterialTheme.colorScheme.onSurfaceVariant
+            )
+        }
         categories.forEach { category ->
             CategoryRow(category = category, onDeleteClick = { onDeleteClick(category) })
-        }
-        TextButton(onClick = onAddClick) {
-            Text("+ Add category")
         }
     }
 }
@@ -212,25 +228,39 @@ private fun CategoryRow(
 @Composable
 private fun AddCategoryDialog(
     type: TransactionType,
+    onTypeChange: (TransactionType) -> Unit,
     name: String,
     onNameChange: (String) -> Unit,
     errorMessage: String?,
     onConfirm: () -> Unit,
     onDismiss: () -> Unit
 ) {
-    val typeLabel = if (type == TransactionType.INCOME) "Income" else "Expense"
     AlertDialog(
         onDismissRequest = onDismiss,
-        title = { Text("Add $typeLabel category") },
+        title = { Text("Add category") },
         text = {
-            OutlinedTextField(
-                value = name,
-                onValueChange = onNameChange,
-                label = { Text("Category name") },
-                isError = errorMessage != null,
-                supportingText = { errorMessage?.let { Text(it) } },
-                singleLine = true
-            )
+            Column(verticalArrangement = Arrangement.spacedBy(12.dp)) {
+                Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
+                    CategoryTypeOption(
+                        label = "Expense",
+                        selected = type == TransactionType.EXPENSE,
+                        onClick = { onTypeChange(TransactionType.EXPENSE) }
+                    )
+                    CategoryTypeOption(
+                        label = "Income",
+                        selected = type == TransactionType.INCOME,
+                        onClick = { onTypeChange(TransactionType.INCOME) }
+                    )
+                }
+                OutlinedTextField(
+                    value = name,
+                    onValueChange = onNameChange,
+                    label = { Text("Category name") },
+                    isError = errorMessage != null,
+                    supportingText = { errorMessage?.let { Text(it) } },
+                    singleLine = true
+                )
+            }
         },
         confirmButton = {
             TextButton(onClick = onConfirm) {
@@ -243,6 +273,15 @@ private fun AddCategoryDialog(
             }
         }
     )
+}
+
+@Composable
+private fun CategoryTypeOption(label: String, selected: Boolean, onClick: () -> Unit) {
+    if (selected) {
+        Button(onClick = onClick) { Text(label) }
+    } else {
+        OutlinedButton(onClick = onClick) { Text(label) }
+    }
 }
 
 @Composable

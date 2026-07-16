@@ -16,10 +16,12 @@ import androidx.navigation.compose.composable
 import androidx.navigation.compose.currentBackStackEntryAsState
 import androidx.navigation.compose.rememberNavController
 import androidx.navigation.navArgument
+import com.aradrotem.spendwise.ui.screens.AddRecurringPlanScreen
 import com.aradrotem.spendwise.ui.screens.AddTransactionScreen
 import com.aradrotem.spendwise.ui.screens.BudgetsScreen
 import com.aradrotem.spendwise.ui.screens.CategoriesScreen
 import com.aradrotem.spendwise.ui.screens.HomeScreen
+import com.aradrotem.spendwise.ui.screens.RecurringPaymentsScreen
 import com.aradrotem.spendwise.ui.screens.SettingsScreen
 import com.aradrotem.spendwise.ui.screens.TransactionsScreen
 
@@ -29,10 +31,12 @@ fun SpendWiseApp() {
     val currentRoute = navController.currentBackStackEntryAsState().value?.destination?.route
     val showBottomBar = currentRoute != Screen.AddTransaction.route &&
         currentRoute != Screen.EditTransaction.route &&
-        currentRoute != Screen.Categories.route
-    // The Budgets screen has its own "Add budget" action, so the global "Add transaction" FAB
-    // is hidden there to avoid two competing add actions.
-    val showFab = showBottomBar && currentRoute != Screen.Budgets.route
+        currentRoute != Screen.Categories.route &&
+        currentRoute != Screen.AddRecurringPayment.route &&
+        currentRoute != Screen.EditRecurringPayment.route
+    // The Budgets and Recurring Payments screens each have their own "Add" action, so the global
+    // "Add transaction" FAB is hidden there to avoid two competing add actions.
+    val showFab = showBottomBar && currentRoute != Screen.Budgets.route && currentRoute != Screen.RecurringPayments.route
 
     Scaffold(
         bottomBar = {
@@ -86,11 +90,36 @@ fun SpendWiseApp() {
             composable(Screen.Budgets.route) { BudgetsScreen() }
             composable(Screen.Settings.route) {
                 SettingsScreen(
-                    onNavigateToCategories = { navController.navigate(Screen.Categories.route) }
+                    onNavigateToCategories = { navController.navigate(Screen.Categories.route) },
+                    onNavigateToRecurringPayments = { navController.navigate(Screen.RecurringPayments.route) }
                 )
             }
             composable(Screen.Categories.route) {
                 CategoriesScreen(onBack = { navController.popBackStack() })
+            }
+            composable(Screen.RecurringPayments.route) {
+                RecurringPaymentsScreen(
+                    onAddPlan = { navController.navigate(Screen.AddRecurringPayment.route) },
+                    onEditPlan = { planId -> navController.navigate(Screen.EditRecurringPayment.createRoute(planId)) },
+                    onBack = { navController.popBackStack() }
+                )
+            }
+            composable(Screen.AddRecurringPayment.route) {
+                AddRecurringPlanScreen(
+                    onSaveSuccess = { navController.popBackStack() },
+                    onBack = { navController.popBackStack() }
+                )
+            }
+            composable(
+                route = Screen.EditRecurringPayment.route,
+                arguments = listOf(navArgument("planId") { type = NavType.LongType })
+            ) { backStackEntry ->
+                val planId = backStackEntry.arguments?.getLong("planId")
+                AddRecurringPlanScreen(
+                    planId = planId,
+                    onSaveSuccess = { navController.popBackStack() },
+                    onBack = { navController.popBackStack() }
+                )
             }
             composable(Screen.AddTransaction.route) {
                 AddTransactionScreen(

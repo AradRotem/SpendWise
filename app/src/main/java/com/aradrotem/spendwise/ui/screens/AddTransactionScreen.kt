@@ -13,8 +13,6 @@ import androidx.compose.foundation.text.KeyboardOptions
 import androidx.compose.foundation.verticalScroll
 import androidx.compose.material3.Button
 import androidx.compose.material3.CircularProgressIndicator
-import androidx.compose.material3.DatePicker
-import androidx.compose.material3.DatePickerDialog
 import androidx.compose.material3.ExperimentalMaterial3Api
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.OutlinedButton
@@ -23,14 +21,10 @@ import androidx.compose.material3.Scaffold
 import androidx.compose.material3.Text
 import androidx.compose.material3.TextButton
 import androidx.compose.material3.TopAppBar
-import androidx.compose.material3.rememberDatePickerState
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.collectAsState
 import androidx.compose.runtime.getValue
-import androidx.compose.runtime.mutableStateOf
-import androidx.compose.runtime.remember
-import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.platform.LocalContext
@@ -40,7 +34,7 @@ import androidx.lifecycle.viewmodel.compose.viewModel
 import com.aradrotem.spendwise.SpendWiseApplication
 import com.aradrotem.spendwise.data.local.TransactionType
 import com.aradrotem.spendwise.ui.components.CategoryDropdownField
-import com.aradrotem.spendwise.ui.format.formatDate
+import com.aradrotem.spendwise.ui.components.DateField
 
 @OptIn(ExperimentalMaterial3Api::class)
 @Composable
@@ -168,43 +162,6 @@ fun AddTransactionScreen(
                     Text(if (isEditMode) "Update" else "Save")
                 }
             }
-        }
-    }
-}
-
-@OptIn(ExperimentalMaterial3Api::class)
-@Composable
-private fun DateField(
-    dateMillis: Long,
-    onDateSelected: (Long) -> Unit,
-    modifier: Modifier = Modifier
-) {
-    var showPicker by remember { mutableStateOf(false) }
-    val formattedDate = remember(dateMillis) { formatDate(dateMillis) }
-
-    OutlinedButton(onClick = { showPicker = true }, modifier = modifier.fillMaxWidth()) {
-        Text("Date: $formattedDate")
-    }
-
-    if (showPicker) {
-        val datePickerState = rememberDatePickerState(initialSelectedDateMillis = dateMillis)
-        DatePickerDialog(
-            onDismissRequest = { showPicker = false },
-            confirmButton = {
-                TextButton(onClick = {
-                    datePickerState.selectedDateMillis?.let(onDateSelected)
-                    showPicker = false
-                }) {
-                    Text("OK")
-                }
-            },
-            dismissButton = {
-                TextButton(onClick = { showPicker = false }) {
-                    Text("Cancel")
-                }
-            }
-        ) {
-            DatePicker(state = datePickerState)
         }
     }
 }

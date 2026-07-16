@@ -1,0 +1,76 @@
+package com.aradrotem.spendwise.domain
+
+import com.aradrotem.spendwise.data.local.CategoryMonthlyTotal
+import com.aradrotem.spendwise.data.local.TransactionDao
+import com.aradrotem.spendwise.data.local.TransactionEntity
+import com.aradrotem.spendwise.data.local.TransactionType
+import kotlinx.coroutines.flow.Flow
+import kotlinx.coroutines.flow.flowOf
+
+// In-memory TransactionDao used to unit-test RecurringPaymentGenerator without a real database.
+// insertGeneratedIgnoringConflicts mirrors the real unique index on
+// (recurringPlanId, scheduledYearMonth): only rows where both are non-null participate in the
+// uniqueness check, matching SQLite's "NULL is never equal to NULL" semantics.
+class FakeTransactionDao : TransactionDao {
+    private val rows = mutableListOf<TransactionEntity>()
+    private var nextId = 1L
+
+    val allRows: List<TransactionEntity> get() = rows.toList()
+
+    override suspend fun insert(transaction: TransactionEntity): Long {
+        val withId = transaction.copy(id = nextId++)
+        rows += withId
+        return withId.id
+    }
+
+    override suspend fun update(transaction: TransactionEntity) {
+        val index = rows.indexOfFirst { it.id == transaction.id }
+        if (index >= 0) rows[index] = transaction
+    }
+
+    override suspend fun delete(transaction: TransactionEntity) {
+        rows.removeAll { it.id == transaction.id }
+    }
+
+    override fun observeAll(): Flow<List<TransactionEntity>> = flowOf(rows.toList())
+
+    override fun observeBetween(startTimestamp: Long, endTimestamp: Long): Flow<List<TransactionEntity>> =
+        flowOf(rows.filter { it.timestamp in startTimestamp..endTimestamp })
+
+    override suspend fun getById(id: Long): TransactionEntity? = rows.firstOrNull { it.id == id }
+
+    override suspend fun countByCategoryAndType(categoryName: String, type: TransactionType): Int =
+        rows.count { it.category == categoryName && it.type == type }
+
+    override fun observeExpenseTotalsByCategory(startTimestamp: Long, endTimestampExclusive: Long): Flow<List<CategoryMonthlyTotal>> =
+        flowOf(emptyList())
+
+    override fun observeTotalByType(type: TransactionType, startTimestamp: Long, endTimestampExclusive: Long): Flow<Long> =
+        flowOf(0L)
+
+    override fun observeRecent(limit: Int): Flow<List<TransactionEntity>> = flowOf(rows.take(limit))
+
+    override suspend fun insertGeneratedIgnoringConflicts(transactions: List<TransactionEntity>): List<Long> =
+        transactions.map { candidate ->
+            val conflicts = candidate.recurringPlanId != null && candidate.scheduledYearMonth != null &&
+                rows.any {
+                    it.recurringPlanId == candidate.recurringPlanId && it.scheduledYearMonth == candidate.scheduledYearMonth
+                }
+            if (conflicts) {
+                -1L
+            } else {
+                val withId = candidate.copy(id = nextId++)
+                rows += withId
+                withId.id
+            }
+        }
+
+    override suspend fun existsGeneratedPayment(planId: Long, yearMonth: String): Boolean =
+        rows.any { it.recurringPlanId == planId && it.scheduledYearMonth == yearMonth }
+
+    override suspend fun countGeneratedForPlan(planId: Long): Int =
+        rows.count { it.recurringPlanId == planId && it.isAutomaticallyGenerated }
+
+    override fun observeByPlan(planId: Long): Flow<List<TransactionEntity>> =
+        flowOf(rows.filter { it.recurringPlanId == planId })
+}

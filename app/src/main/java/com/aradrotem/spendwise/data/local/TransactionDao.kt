@@ -3,7 +3,9 @@ package com.aradrotem.spendwise.data.local
 import androidx.room.Dao
 import androidx.room.Delete
 import androidx.room.Insert
+import androidx.room.OnConflictStrategy
 import androidx.room.Query
+import androidx.room.Transaction
 import androidx.room.Update
 import kotlinx.coroutines.flow.Flow
 
@@ -53,6 +55,25 @@ interface TransactionDao {
 
     @Query("SELECT * FROM transactions ORDER BY timestamp DESC LIMIT :limit")
     fun observeRecent(limit: Int = 5): Flow<List<TransactionEntity>>
+
+    // Bulk-insert candidate generated payments, silently skipping any that already exist for
+    // (recurringPlanId, scheduledYearMonth) thanks to the unique index. This is the real
+    // duplicate guard: the generator's own due-date logic is not trusted as the sole gate, since
+    // repeated/concurrent generation calls must still be safe. Room wraps a multi-row @Insert in
+    // its own transaction, but @Transaction here makes that guarantee explicit.
+    // Returns one row id per input, using -1 for entries that were ignored as duplicates.
+    @Transaction
+    @Insert(onConflict = OnConflictStrategy.IGNORE)
+    suspend fun insertGeneratedIgnoringConflicts(transactions: List<TransactionEntity>): List<Long>
+
+    @Query("SELECT EXISTS(SELECT 1 FROM transactions WHERE recurringPlanId = :planId AND scheduledYearMonth = :yearMonth)")
+    suspend fun existsGeneratedPayment(planId: Long, yearMonth: String): Boolean
+
+    @Query("SELECT COUNT(*) FROM transactions WHERE recurringPlanId = :planId AND isAutomaticallyGenerated = 1")
+    suspend fun countGeneratedForPlan(planId: Long): Int
+
+    @Query("SELECT * FROM transactions WHERE recurringPlanId = :planId ORDER BY scheduledYearMonth ASC")
+    fun observeByPlan(planId: Long): Flow<List<TransactionEntity>>
 }
 
 data class CategoryMonthlyTotal(

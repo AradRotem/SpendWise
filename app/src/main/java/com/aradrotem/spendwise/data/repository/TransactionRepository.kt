@@ -31,4 +31,14 @@ class TransactionRepository(private val transactionDao: TransactionDao) {
     suspend fun update(transaction: TransactionEntity) = transactionDao.update(transaction)
 
     suspend fun delete(transaction: TransactionEntity) = transactionDao.delete(transaction)
+
+    fun observeByPlan(planId: Long): Flow<List<TransactionEntity>> = transactionDao.observeByPlan(planId)
+
+    suspend fun countGeneratedForPlan(planId: Long): Int = transactionDao.countGeneratedForPlan(planId)
+
+    suspend fun existsGeneratedPayment(planId: Long, yearMonth: String): Boolean =
+        transactionDao.existsGeneratedPayment(planId, yearMonth)
+
+    suspend fun insertGeneratedIgnoringConflicts(transactions: List<TransactionEntity>): List<Long> =
+        transactionDao.insertGeneratedIgnoringConflicts(transactions)
 }
