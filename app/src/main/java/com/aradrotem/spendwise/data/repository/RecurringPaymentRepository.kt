@@ -157,6 +157,25 @@ class RecurringPaymentRepository(private val planDao: RecurringPaymentPlanDao) {
 
     suspend fun markCompleted(id: Long) = planDao.updateStatus(id, RecurringPlanStatus.COMPLETED)
 
+    // "Delete this and future" for a monthly plan (see RecurringOccurrenceManager): stops the
+    // plan AND caps its schedule with an end date. Both together, not just STOPPED status, so a
+    // later Restore can never regenerate past this point - RecurringPaymentSchedule always
+    // respects endDateMillis regardless of status.
+    suspend fun stopWithEndDate(id: Long, endDateMillis: Long) {
+        val existing = planDao.getById(id) ?: return
+        planDao.update(existing.copy(endDateMillis = endDateMillis, status = RecurringPlanStatus.STOPPED))
+    }
+
+    // "Delete this and future" for an installment plan: caps totalInstallments at the count that
+    // must remain, so even a later Restore can never generate beyond it (installment scheduling
+    // is governed purely by totalInstallments, not an end date).
+    suspend fun stopFromInstallment(id: Long, newTotalInstallments: Int) {
+        val existing = planDao.getById(id) ?: return
+        planDao.update(
+            existing.copy(totalInstallments = newTotalInstallments.coerceAtLeast(0), status = RecurringPlanStatus.STOPPED)
+        )
+    }
+
     // Removes the plan itself only. Already-generated transactions are untouched (no FK/cascade
     // - see RecurringPaymentPlanEntity), so financial history is preserved.
     suspend fun deletePlan(plan: RecurringPaymentPlanEntity) = planDao.delete(plan)

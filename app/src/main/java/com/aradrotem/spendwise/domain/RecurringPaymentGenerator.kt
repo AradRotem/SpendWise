@@ -4,6 +4,7 @@ import com.aradrotem.spendwise.data.local.RecurringPaymentPlanEntity
 import com.aradrotem.spendwise.data.local.RecurringPlanType
 import com.aradrotem.spendwise.data.local.TransactionEntity
 import com.aradrotem.spendwise.data.local.TransactionType
+import com.aradrotem.spendwise.data.repository.RecurringOccurrenceExceptionRepository
 import com.aradrotem.spendwise.data.repository.RecurringPaymentRepository
 import com.aradrotem.spendwise.data.repository.TransactionRepository
 import java.time.LocalDate
@@ -14,10 +15,15 @@ import java.time.ZoneId
 //
 // Idempotent by construction: duplicate candidates are rejected by the DB-level unique index on
 // (recurringPlanId, scheduledYearMonth) via insertGeneratedIgnoringConflicts, so calling this
-// repeatedly (app restarts, multiple entry points) never creates extra transactions.
+// repeatedly (app restarts, multiple entry points) never creates extra transactions. Occurrences
+// the user intentionally deleted are excluded before that point via occurrence exceptions (see
+// RecurringOccurrenceExceptionRepository) - deleting a transaction row alone would free up its
+// unique slot and let catch-up generation recreate it, so the exception is what makes deletion
+// actually stick.
 class RecurringPaymentGenerator(
     private val recurringPaymentRepository: RecurringPaymentRepository,
     private val transactionRepository: TransactionRepository,
+    private val occurrenceExceptionRepository: RecurringOccurrenceExceptionRepository,
     private val zoneId: ZoneId = ZoneId.systemDefault()
 ) {
 
@@ -34,26 +40,31 @@ class RecurringPaymentGenerator(
 
         var insertedCount = 0
         if (candidates.isNotEmpty()) {
-            val transactionType = transactionTypeFor(plan.type)
-            val entities = candidates.map { candidate ->
-                TransactionEntity(
-                    amountInCents = candidate.amountCents,
-                    type = transactionType,
-                    category = plan.categoryName,
-                    timestamp = candidate.dueDate.atStartOfDay(zoneId).toInstant().toEpochMilli(),
-                    note = plan.note,
-                    recurringPlanId = plan.id,
-                    installmentNumber = candidate.installmentNumber,
-                    totalInstallments = plan.totalInstallments,
-                    isAutomaticallyGenerated = true,
-                    scheduledYearMonth = candidate.scheduledYearMonth,
-                    // Snapshot, not a live reference: renaming or deleting the plan later must
-                    // not change how already-generated transactions display (see TransactionEntity).
-                    sourceTitle = plan.title
-                )
+            val skippedMonths = occurrenceExceptionRepository.getSkippedMonths(plan.id)
+            val dueCandidates = candidates.filterNot { it.scheduledYearMonth in skippedMonths }
+
+            if (dueCandidates.isNotEmpty()) {
+                val transactionType = transactionTypeFor(plan.type)
+                val entities = dueCandidates.map { candidate ->
+                    TransactionEntity(
+                        amountInCents = candidate.amountCents,
+                        type = transactionType,
+                        category = plan.categoryName,
+                        timestamp = candidate.dueDate.atStartOfDay(zoneId).toInstant().toEpochMilli(),
+                        note = plan.note,
+                        recurringPlanId = plan.id,
+                        installmentNumber = candidate.installmentNumber,
+                        totalInstallments = plan.totalInstallments,
+                        isAutomaticallyGenerated = true,
+                        scheduledYearMonth = candidate.scheduledYearMonth,
+                        // Snapshot, not a live reference: renaming or deleting the plan later must
+                        // not change how already-generated transactions display (see TransactionEntity).
+                        sourceTitle = plan.title
+                    )
+                }
+                val insertedIds = transactionRepository.insertGeneratedIgnoringConflicts(entities)
+                insertedCount = insertedIds.count { it != -1L }
             }
-            val insertedIds = transactionRepository.insertGeneratedIgnoringConflicts(entities)
-            insertedCount = insertedIds.count { it != -1L }
         }
 
         if (plan.type == RecurringPlanType.INSTALLMENT) {

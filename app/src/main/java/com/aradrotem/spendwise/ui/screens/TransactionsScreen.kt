@@ -21,6 +21,7 @@ import androidx.compose.runtime.collectAsState
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
+import androidx.compose.runtime.rememberCoroutineScope
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
@@ -31,21 +32,41 @@ import androidx.lifecycle.viewmodel.compose.viewModel
 import com.aradrotem.spendwise.SpendWiseApplication
 import com.aradrotem.spendwise.data.local.TransactionEntity
 import com.aradrotem.spendwise.ui.components.TransactionRow
+import kotlinx.coroutines.launch
 
 @OptIn(ExperimentalFoundationApi::class)
 @Composable
 fun TransactionsScreen(
     onEditTransaction: (Long) -> Unit,
+    onEditThisAndFuture: (planId: Long, transactionId: Long) -> Unit,
+    onOpenRecurringPlan: (planId: Long) -> Unit,
     modifier: Modifier = Modifier,
     viewModel: TransactionsViewModel = viewModel(
         factory = TransactionsViewModel.factory(
-            (LocalContext.current.applicationContext as SpendWiseApplication).transactionRepository
+            (LocalContext.current.applicationContext as SpendWiseApplication).transactionRepository,
+            (LocalContext.current.applicationContext as SpendWiseApplication).recurringPaymentRepository,
+            (LocalContext.current.applicationContext as SpendWiseApplication).recurringOccurrenceManager
         )
     )
 ) {
     val uiState by viewModel.uiState.collectAsState()
+    val coroutineScope = rememberCoroutineScope()
+
     var actionTransaction by remember { mutableStateOf<TransactionEntity?>(null) }
     var transactionPendingDelete by remember { mutableStateOf<TransactionEntity?>(null) }
+
+    var generatedActionTransaction by remember { mutableStateOf<TransactionEntity?>(null) }
+    var generatedActionInfo by remember { mutableStateOf<GeneratedTransactionActionInfo?>(null) }
+    var occurrencePendingDelete by remember { mutableStateOf<TransactionEntity?>(null) }
+    var occurrenceAndFuturePendingDelete by remember { mutableStateOf<TransactionEntity?>(null) }
+    var laterGeneratedCount by remember { mutableStateOf(0) }
+
+    fun openGeneratedActionMenu(transaction: TransactionEntity) {
+        coroutineScope.launch {
+            generatedActionInfo = viewModel.loadActionMenuInfo(transaction)
+            generatedActionTransaction = transaction
+        }
+    }
 
     Box(modifier = modifier.fillMaxSize()) {
         when {
@@ -65,13 +86,10 @@ fun TransactionsScreen(
                             transaction = transaction,
                             modifier = Modifier.combinedClickable(
                                 onClick = {},
-                                // Automatically generated payments are read-only in this step:
-                                // editing them through the manual-transaction form would silently
-                                // drop their recurring-plan link (Add Transaction has no fields
-                                // for it), and deleting one could let it be regenerated on the
-                                // next run. Both are deferred to Step 11's plan-aware editing.
                                 onLongClick = {
-                                    if (!transaction.isAutomaticallyGenerated) {
+                                    if (transaction.isAutomaticallyGenerated) {
+                                        openGeneratedActionMenu(transaction)
+                                    } else {
                                         actionTransaction = transaction
                                     }
                                 }
@@ -105,6 +123,62 @@ fun TransactionsScreen(
                 transactionPendingDelete = null
             },
             onDismiss = { transactionPendingDelete = null }
+        )
+    }
+
+    if (generatedActionTransaction != null && generatedActionInfo != null) {
+        val transaction = generatedActionTransaction!!
+        val info = generatedActionInfo!!
+        GeneratedTransactionActionDialog(
+            info = info,
+            onEditThis = {
+                generatedActionTransaction = null
+                onEditTransaction(transaction.id)
+            },
+            onEditThisAndFuture = {
+                generatedActionTransaction = null
+                transaction.recurringPlanId?.let { onEditThisAndFuture(it, transaction.id) }
+            },
+            onDeleteThis = {
+                generatedActionTransaction = null
+                occurrencePendingDelete = transaction
+            },
+            onDeleteThisAndFuture = {
+                generatedActionTransaction = null
+                coroutineScope.launch {
+                    laterGeneratedCount = viewModel.countLaterGeneratedTransactions(transaction)
+                    occurrenceAndFuturePendingDelete = transaction
+                }
+            },
+            onOpenPlan = {
+                generatedActionTransaction = null
+                transaction.recurringPlanId?.let(onOpenRecurringPlan)
+            },
+            onCancel = {
+                generatedActionTransaction = null
+                generatedActionInfo = null
+            }
+        )
+    }
+
+    occurrencePendingDelete?.let { transaction ->
+        DeleteOccurrenceDialog(
+            onConfirm = {
+                viewModel.deleteOccurrenceOnly(transaction)
+                occurrencePendingDelete = null
+            },
+            onDismiss = { occurrencePendingDelete = null }
+        )
+    }
+
+    occurrenceAndFuturePendingDelete?.let { transaction ->
+        DeleteOccurrenceAndFutureDialog(
+            laterCount = laterGeneratedCount,
+            onConfirm = {
+                viewModel.deleteThisAndFuture(transaction)
+                occurrenceAndFuturePendingDelete = null
+            },
+            onDismiss = { occurrenceAndFuturePendingDelete = null }
         )
     }
 }
@@ -156,6 +230,116 @@ private fun DeleteConfirmationDialog(
         confirmButton = {
             TextButton(onClick = onConfirm) {
                 Text("Delete")
+            }
+        },
+        dismissButton = {
+            TextButton(onClick = onDismiss) {
+                Text("Cancel")
+            }
+        }
+    )
+}
+
+// Options for a single automatically generated transaction. Which scope each choice affects -
+// one month only, this month and future months, or the whole plan - is spelled out in the label
+// itself so the user never has to guess.
+@Composable
+private fun GeneratedTransactionActionDialog(
+    info: GeneratedTransactionActionInfo,
+    onEditThis: () -> Unit,
+    onEditThisAndFuture: () -> Unit,
+    onDeleteThis: () -> Unit,
+    onDeleteThisAndFuture: () -> Unit,
+    onOpenPlan: () -> Unit,
+    onCancel: () -> Unit
+) {
+    AlertDialog(
+        onDismissRequest = onCancel,
+        title = {
+            Text(
+                text = "Recurring transaction options",
+                modifier = Modifier.fillMaxWidth(),
+                textAlign = TextAlign.Center
+            )
+        },
+        text = {
+            Column(
+                modifier = Modifier.fillMaxWidth(),
+                verticalArrangement = Arrangement.spacedBy(4.dp)
+            ) {
+                TextButton(onClick = onEditThis, modifier = Modifier.fillMaxWidth()) {
+                    Text("Edit this transaction")
+                }
+                if (info.canActOnFuture) {
+                    TextButton(onClick = onEditThisAndFuture, modifier = Modifier.fillMaxWidth()) {
+                        Text("Edit this and future transactions")
+                    }
+                }
+                TextButton(onClick = onDeleteThis, modifier = Modifier.fillMaxWidth()) {
+                    Text("Delete this transaction", color = MaterialTheme.colorScheme.error)
+                }
+                if (info.canActOnFuture) {
+                    TextButton(onClick = onDeleteThisAndFuture, modifier = Modifier.fillMaxWidth()) {
+                        Text("Delete this and future transactions", color = MaterialTheme.colorScheme.error)
+                    }
+                }
+                if (info.planExists) {
+                    TextButton(onClick = onOpenPlan, modifier = Modifier.fillMaxWidth()) {
+                        Text("Open recurring plan")
+                    }
+                }
+                TextButton(onClick = onCancel, modifier = Modifier.fillMaxWidth()) {
+                    Text("Cancel")
+                }
+            }
+        },
+        confirmButton = {}
+    )
+}
+
+@Composable
+private fun DeleteOccurrenceDialog(onConfirm: () -> Unit, onDismiss: () -> Unit) {
+    AlertDialog(
+        onDismissRequest = onDismiss,
+        title = { Text("Delete this transaction?") },
+        text = {
+            Text(
+                "This transaction will be removed and will not be regenerated. " +
+                    "The recurring plan will continue for other months."
+            )
+        },
+        confirmButton = {
+            TextButton(onClick = onConfirm) {
+                Text("Delete this transaction", color = MaterialTheme.colorScheme.error)
+            }
+        },
+        dismissButton = {
+            TextButton(onClick = onDismiss) {
+                Text("Cancel")
+            }
+        }
+    )
+}
+
+@Composable
+private fun DeleteOccurrenceAndFutureDialog(laterCount: Int, onConfirm: () -> Unit, onDismiss: () -> Unit) {
+    AlertDialog(
+        onDismissRequest = onDismiss,
+        title = { Text("Delete this and future transactions?") },
+        text = {
+            val extra = if (laterCount > 0) {
+                " and $laterCount later generated transaction${if (laterCount == 1) "" else "s"}"
+            } else {
+                ""
+            }
+            Text(
+                "This transaction$extra will be removed. Earlier transactions will remain in " +
+                    "your history. No future transactions will be generated from this plan."
+            )
+        },
+        confirmButton = {
+            TextButton(onClick = onConfirm) {
+                Text("Delete this and future", color = MaterialTheme.colorScheme.error)
             }
         },
         dismissButton = {

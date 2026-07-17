@@ -51,12 +51,14 @@ fun RecurringPaymentsScreen(
         factory = RecurringPlansViewModel.factory(
             (LocalContext.current.applicationContext as SpendWiseApplication).recurringPaymentRepository,
             (LocalContext.current.applicationContext as SpendWiseApplication).transactionRepository,
+            (LocalContext.current.applicationContext as SpendWiseApplication).recurringOccurrenceExceptionRepository,
             (LocalContext.current.applicationContext as SpendWiseApplication).recurringPaymentGenerator
         )
     )
 ) {
     val uiState by viewModel.uiState.collectAsState()
     var planPendingDelete by remember { mutableStateOf<RecurringPaymentPlanEntity?>(null) }
+    var planPendingStop by remember { mutableStateOf<RecurringPaymentPlanEntity?>(null) }
 
     Scaffold(
         modifier = modifier,
@@ -88,24 +90,54 @@ fun RecurringPaymentsScreen(
                 uiState.items.isEmpty() -> Box(modifier = Modifier.fillMaxSize(), contentAlignment = Alignment.Center) {
                     EmptyPlansState(onAddClick = onAddPlan)
                 }
-                else -> LazyColumn(
-                    modifier = Modifier.fillMaxSize(),
-                    contentPadding = PaddingValues(16.dp),
-                    verticalArrangement = Arrangement.spacedBy(12.dp)
-                ) {
-                    items(uiState.items, key = { it.plan.id }) { item ->
-                        RecurringPlanCard(
-                            item = item,
-                            onEdit = { onEditPlan(item.plan.id) },
-                            onPause = { viewModel.onPause(item.plan.id) },
-                            onResume = { viewModel.onResume(item.plan.id) },
-                            onStop = { viewModel.onStop(item.plan.id) },
-                            onRequestDelete = { planPendingDelete = item.plan }
-                        )
+                else -> {
+                    val grouped = uiState.items.groupBy { it.plan.status }
+                    // Active/Paused first since they're what the user is most likely to act on;
+                    // Stopped/Completed last as they're effectively archived.
+                    val sections = listOf(
+                        "Active" to grouped[RecurringPlanStatus.ACTIVE].orEmpty(),
+                        "Paused" to grouped[RecurringPlanStatus.PAUSED].orEmpty(),
+                        "Stopped" to grouped[RecurringPlanStatus.STOPPED].orEmpty(),
+                        "Completed" to grouped[RecurringPlanStatus.COMPLETED].orEmpty()
+                    ).filter { it.second.isNotEmpty() }
+
+                    LazyColumn(
+                        modifier = Modifier.fillMaxSize(),
+                        contentPadding = PaddingValues(16.dp),
+                        verticalArrangement = Arrangement.spacedBy(12.dp)
+                    ) {
+                        sections.forEach { (label, plans) ->
+                            item(key = "header-$label") {
+                                Text(
+                                    text = "$label (${plans.size})",
+                                    style = MaterialTheme.typography.titleMedium
+                                )
+                            }
+                            items(plans, key = { it.plan.id }) { item ->
+                                RecurringPlanCard(
+                                    item = item,
+                                    onEdit = { onEditPlan(item.plan.id) },
+                                    onPause = { viewModel.onPause(item.plan.id) },
+                                    onResume = { viewModel.onResume(item.plan.id) },
+                                    onRequestStop = { planPendingStop = item.plan },
+                                    onRequestDelete = { planPendingDelete = item.plan }
+                                )
+                            }
+                        }
                     }
                 }
             }
         }
+    }
+
+    planPendingStop?.let { plan ->
+        StopPlanDialog(
+            onConfirm = {
+                viewModel.onStop(plan.id)
+                planPendingStop = null
+            },
+            onDismiss = { planPendingStop = null }
+        )
     }
 
     planPendingDelete?.let { plan ->
@@ -145,7 +177,7 @@ private fun RecurringPlanCard(
     onEdit: () -> Unit,
     onPause: () -> Unit,
     onResume: () -> Unit,
-    onStop: () -> Unit,
+    onRequestStop: () -> Unit,
     onRequestDelete: () -> Unit,
     modifier: Modifier = Modifier
 ) {
@@ -165,7 +197,12 @@ private fun RecurringPlanCard(
             Text(amountLabel(plan))
 
             if (plan.type == RecurringPlanType.INSTALLMENT) {
-                Text("${item.generatedCount} of ${plan.totalInstallments ?: 0} payments")
+                installmentProgressText(
+                    status = plan.status,
+                    totalInstallments = plan.totalInstallments ?: 0,
+                    remainingGeneratedInstallments = item.generatedCount,
+                    deletedInstallmentOccurrences = item.deletedInstallmentOccurrences
+                ).forEach { line -> Text(line) }
             }
 
             item.nextDueDate?.let { nextDueDate ->
@@ -176,12 +213,12 @@ private fun RecurringPlanCard(
                 when (plan.status) {
                     RecurringPlanStatus.ACTIVE -> {
                         TextButton(onClick = onPause) { Text("Pause") }
-                        TextButton(onClick = onStop) { Text("Stop", color = MaterialTheme.colorScheme.error) }
+                        TextButton(onClick = onRequestStop) { Text("Stop", color = MaterialTheme.colorScheme.error) }
                         TextButton(onClick = onEdit) { Text("Edit") }
                     }
                     RecurringPlanStatus.PAUSED -> {
                         TextButton(onClick = onResume) { Text("Resume") }
-                        TextButton(onClick = onStop) { Text("Stop", color = MaterialTheme.colorScheme.error) }
+                        TextButton(onClick = onRequestStop) { Text("Stop", color = MaterialTheme.colorScheme.error) }
                         TextButton(onClick = onEdit) { Text("Edit") }
                     }
                     RecurringPlanStatus.STOPPED -> {
@@ -197,6 +234,30 @@ private fun RecurringPlanCard(
             }
         }
     }
+}
+
+@Composable
+private fun StopPlanDialog(onConfirm: () -> Unit, onDismiss: () -> Unit) {
+    AlertDialog(
+        onDismissRequest = onDismiss,
+        title = { Text("Stop this recurring plan?") },
+        text = {
+            Text(
+                "Existing transactions will remain in your transaction history. " +
+                    "No future transactions will be generated until you restore this plan."
+            )
+        },
+        confirmButton = {
+            TextButton(onClick = onConfirm) {
+                Text("Stop", color = MaterialTheme.colorScheme.error)
+            }
+        },
+        dismissButton = {
+            TextButton(onClick = onDismiss) {
+                Text("Cancel")
+            }
+        }
+    )
 }
 
 @Composable
@@ -247,4 +308,32 @@ private fun statusColor(status: RecurringPlanStatus) = when (status) {
 private fun amountLabel(plan: RecurringPaymentPlanEntity): String = when (plan.type) {
     RecurringPlanType.MONTHLY_RECURRING, RecurringPlanType.MONTHLY_SALARY -> "${formatAmountInCents(plan.amountInCents ?: 0L)} / month"
     RecurringPlanType.INSTALLMENT -> "${formatAmountInCents(plan.totalAmountInCents ?: 0L)} total"
+}
+
+// One or two lines of installment-progress text. Only a Completed plan with at least one
+// intentionally deleted occurrence gets the two-line "remain in history" / "deleted manually"
+// form - Active/Paused/Stopped plans, and a Completed plan with nothing deleted, keep the plain
+// "X of Y payments" wording so a deleted-but-Completed plan doesn't read as though a payment is
+// still outstanding (it isn't: the deletion is historical only, see RecurringOccurrenceManager;
+// the plan is never reactivated, its installment count is never changed, and the occurrence is
+// never regenerated). Kept as a top-level pure function - not private, unlike its sibling label
+// helpers in this file - specifically so it's directly unit-testable (see RecurringPlansLogicTest).
+fun installmentProgressText(
+    status: RecurringPlanStatus,
+    totalInstallments: Int,
+    remainingGeneratedInstallments: Int,
+    deletedInstallmentOccurrences: Int
+): List<String> {
+    if (status != RecurringPlanStatus.COMPLETED || deletedInstallmentOccurrences <= 0) {
+        return listOf("$remainingGeneratedInstallments of $totalInstallments payments")
+    }
+    val deletedLine = if (deletedInstallmentOccurrences == 1) {
+        "1 payment was deleted manually"
+    } else {
+        "$deletedInstallmentOccurrences payments were deleted manually"
+    }
+    return listOf(
+        "$remainingGeneratedInstallments of $totalInstallments payments remain in history",
+        deletedLine
+    )
 }

@@ -47,13 +47,16 @@ fun AddRecurringPlanScreen(
     onBack: () -> Unit,
     modifier: Modifier = Modifier,
     planId: Long? = null,
+    occurrenceTransactionId: Long? = null,
     viewModel: AddRecurringPlanViewModel = viewModel(
         factory = AddRecurringPlanViewModel.factory(
             (LocalContext.current.applicationContext as SpendWiseApplication).recurringPaymentRepository,
             (LocalContext.current.applicationContext as SpendWiseApplication).categoryRepository,
             (LocalContext.current.applicationContext as SpendWiseApplication).transactionRepository,
             (LocalContext.current.applicationContext as SpendWiseApplication).recurringPaymentGenerator,
-            planId
+            (LocalContext.current.applicationContext as SpendWiseApplication).recurringOccurrenceManager,
+            planId,
+            occurrenceTransactionId
         )
     )
 ) {
@@ -104,6 +107,15 @@ fun AddRecurringPlanScreen(
                 .verticalScroll(rememberScrollState()),
             verticalArrangement = Arrangement.spacedBy(16.dp)
         ) {
+            if (uiState.occurrenceTransactionId != null) {
+                Text(
+                    text = "Editing plan — these changes also apply to " +
+                        "${uiState.occurrenceScheduledYearMonth.orEmpty()} onward. Earlier transactions are not affected.",
+                    style = MaterialTheme.typography.bodySmall,
+                    color = MaterialTheme.colorScheme.onSurfaceVariant
+                )
+            }
+
             if (isEditMode) {
                 // Plan type is fixed once created: changing it would leave already-generated
                 // history inconsistent with the new type, so it's shown but not editable.

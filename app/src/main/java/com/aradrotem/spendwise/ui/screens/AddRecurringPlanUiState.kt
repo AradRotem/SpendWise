@@ -44,7 +44,14 @@ data class AddRecurringPlanUiState(
     val loadError: String? = null,
     // Number of installments already generated for the loaded plan; installment plans lock
     // total amount/count editing once this is greater than zero.
-    val generatedInstallmentCount: Int = 0
+    val generatedInstallmentCount: Int = 0,
+    // Set when this screen was opened via "Edit this and future transactions" on a specific
+    // generated transaction (see TransactionsScreen). When present, a successful plan save also
+    // applies the new values to this occurrence and any later non-overridden generated ones.
+    val occurrenceTransactionId: Long? = null,
+    // The occurrence's scheduled month, loaded alongside it, purely so the screen can show which
+    // month "and future" starts from.
+    val occurrenceScheduledYearMonth: String? = null
 ) {
     val isEditMode: Boolean get() = planId != null
 

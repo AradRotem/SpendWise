@@ -41,4 +41,27 @@ class TransactionRepository(private val transactionDao: TransactionDao) {
 
     suspend fun insertGeneratedIgnoringConflicts(transactions: List<TransactionEntity>): List<Long> =
         transactionDao.insertGeneratedIgnoringConflicts(transactions)
+
+    suspend fun getGeneratedAfter(planId: Long, yearMonthExclusive: String): List<TransactionEntity> =
+        transactionDao.getGeneratedAfter(planId, yearMonthExclusive)
+
+    suspend fun deleteGeneratedFromMonth(planId: Long, yearMonthInclusive: String) =
+        transactionDao.deleteGeneratedFromMonth(planId, yearMonthInclusive)
+
+    suspend fun updateFutureGeneratedTransactionsWithAmount(
+        planId: Long,
+        yearMonthExclusive: String,
+        amountInCents: Long,
+        category: String,
+        note: String,
+        sourceTitle: String
+    ) = transactionDao.updateFutureGeneratedTransactionsWithAmount(planId, yearMonthExclusive, amountInCents, category, note, sourceTitle)
+
+    suspend fun updateFutureGeneratedTransactionsMetadataOnly(
+        planId: Long,
+        yearMonthExclusive: String,
+        category: String,
+        note: String,
+        sourceTitle: String
+    ) = transactionDao.updateFutureGeneratedTransactionsMetadataOnly(planId, yearMonthExclusive, category, note, sourceTitle)
 }

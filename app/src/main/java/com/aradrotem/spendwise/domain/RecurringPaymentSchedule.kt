@@ -57,6 +57,14 @@ object RecurringPaymentSchedule {
     fun nextDueDate(plan: RecurringPaymentPlanEntity, today: LocalDate, zoneId: ZoneId = ZoneId.systemDefault()): LocalDate? =
         duePayments(plan, today.plusYears(5), zoneId).firstOrNull { it.dueDate.isAfter(today) }?.dueDate
 
+    // Epoch millis for the last instant a monthly plan may still generate into, used by "delete
+    // this and future" (see RecurringOccurrenceManager) to cap a plan's endDateMillis so it can
+    // never regenerate the deleted month or anything after it, even if later restored.
+    fun lastDayOfPreviousMonth(scheduledYearMonth: String, zoneId: ZoneId = ZoneId.systemDefault()): Long {
+        val month = YearMonth.parse(scheduledYearMonth)
+        return month.minusMonths(1).atEndOfMonth().atStartOfDay(zoneId).toInstant().toEpochMilli()
+    }
+
     private fun monthlyDuePayments(
         plan: RecurringPaymentPlanEntity,
         startDate: LocalDate,

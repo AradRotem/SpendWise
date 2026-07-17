@@ -74,6 +74,54 @@ interface TransactionDao {
 
     @Query("SELECT * FROM transactions WHERE recurringPlanId = :planId ORDER BY scheduledYearMonth ASC")
     fun observeByPlan(planId: Long): Flow<List<TransactionEntity>>
+
+    // "yyyy-MM" sorts correctly as a plain string, so no date parsing is needed here.
+    @Query(
+        "SELECT * FROM transactions WHERE recurringPlanId = :planId AND isAutomaticallyGenerated = 1 " +
+            "AND scheduledYearMonth > :yearMonthExclusive ORDER BY scheduledYearMonth ASC"
+    )
+    suspend fun getGeneratedAfter(planId: Long, yearMonthExclusive: String): List<TransactionEntity>
+
+    // Removes the selected occurrence and any later ones already generated for the same plan, in
+    // one statement (">=" covers both, since the unique index guarantees at most one row per
+    // plan+month).
+    @Query(
+        "DELETE FROM transactions WHERE recurringPlanId = :planId AND isAutomaticallyGenerated = 1 " +
+            "AND scheduledYearMonth >= :yearMonthInclusive"
+    )
+    suspend fun deleteGeneratedFromMonth(planId: Long, yearMonthInclusive: String)
+
+    // Brings already-generated, not-yet-reached later occurrences in line with a plan-level edit.
+    // Rows the user already overrode individually (isOccurrenceModified = 1) are left untouched,
+    // so a per-occurrence override always wins over a later bulk "and future" edit.
+    @Query(
+        "UPDATE transactions SET amountInCents = :amountInCents, category = :category, note = :note, sourceTitle = :sourceTitle " +
+            "WHERE recurringPlanId = :planId AND isAutomaticallyGenerated = 1 AND isOccurrenceModified = 0 " +
+            "AND scheduledYearMonth > :yearMonthExclusive"
+    )
+    suspend fun updateFutureGeneratedTransactionsWithAmount(
+        planId: Long,
+        yearMonthExclusive: String,
+        amountInCents: Long,
+        category: String,
+        note: String,
+        sourceTitle: String
+    )
+
+    // Same as above but for installment plans, where per-installment amounts must never be
+    // rewritten retroactively - only safe metadata (category/note/title) is touched.
+    @Query(
+        "UPDATE transactions SET category = :category, note = :note, sourceTitle = :sourceTitle " +
+            "WHERE recurringPlanId = :planId AND isAutomaticallyGenerated = 1 AND isOccurrenceModified = 0 " +
+            "AND scheduledYearMonth > :yearMonthExclusive"
+    )
+    suspend fun updateFutureGeneratedTransactionsMetadataOnly(
+        planId: Long,
+        yearMonthExclusive: String,
+        category: String,
+        note: String,
+        sourceTitle: String
+    )
 }
 
 data class CategoryMonthlyTotal(

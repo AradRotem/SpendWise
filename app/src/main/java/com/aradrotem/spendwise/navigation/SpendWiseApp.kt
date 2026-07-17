@@ -84,6 +84,12 @@ fun SpendWiseApp() {
                 TransactionsScreen(
                     onEditTransaction = { transactionId ->
                         navController.navigate(Screen.EditTransaction.createRoute(transactionId))
+                    },
+                    onEditThisAndFuture = { planId, transactionId ->
+                        navController.navigate(Screen.EditRecurringPayment.createRoute(planId, transactionId))
+                    },
+                    onOpenRecurringPlan = { planId ->
+                        navController.navigate(Screen.EditRecurringPayment.createRoute(planId))
                     }
                 )
             }
@@ -112,11 +118,19 @@ fun SpendWiseApp() {
             }
             composable(
                 route = Screen.EditRecurringPayment.route,
-                arguments = listOf(navArgument("planId") { type = NavType.LongType })
+                arguments = listOf(
+                    navArgument("planId") { type = NavType.LongType },
+                    navArgument("occurrenceTransactionId") {
+                        type = NavType.LongType
+                        defaultValue = -1L
+                    }
+                )
             ) { backStackEntry ->
                 val planId = backStackEntry.arguments?.getLong("planId")
+                val occurrenceTransactionId = backStackEntry.arguments?.getLong("occurrenceTransactionId")?.takeIf { it != -1L }
                 AddRecurringPlanScreen(
                     planId = planId,
+                    occurrenceTransactionId = occurrenceTransactionId,
                     onSaveSuccess = { navController.popBackStack() },
                     onBack = { navController.popBackStack() }
                 )

@@ -3,6 +3,7 @@ package com.aradrotem.spendwise.domain
 import com.aradrotem.spendwise.data.local.RecurringPlanStatus
 import com.aradrotem.spendwise.data.local.RecurringPlanType
 import com.aradrotem.spendwise.data.local.TransactionType
+import com.aradrotem.spendwise.data.repository.RecurringOccurrenceExceptionRepository
 import com.aradrotem.spendwise.data.repository.RecurringPaymentRepository
 import com.aradrotem.spendwise.data.repository.TransactionRepository
 import java.time.LocalDate
@@ -22,17 +23,23 @@ class RecurringPaymentGeneratorTest {
     private val zoneId = ZoneOffset.UTC
     private lateinit var transactionDao: FakeTransactionDao
     private lateinit var planDao: FakeRecurringPaymentPlanDao
+    private lateinit var occurrenceExceptionDao: FakeRecurringOccurrenceExceptionDao
     private lateinit var transactionRepository: TransactionRepository
     private lateinit var recurringPaymentRepository: RecurringPaymentRepository
+    private lateinit var occurrenceExceptionRepository: RecurringOccurrenceExceptionRepository
+    private lateinit var occurrenceManager: RecurringOccurrenceManager
     private lateinit var generator: RecurringPaymentGenerator
 
     @Before
     fun setUp() {
         transactionDao = FakeTransactionDao()
         planDao = FakeRecurringPaymentPlanDao()
+        occurrenceExceptionDao = FakeRecurringOccurrenceExceptionDao()
         transactionRepository = TransactionRepository(transactionDao)
         recurringPaymentRepository = RecurringPaymentRepository(planDao)
-        generator = RecurringPaymentGenerator(recurringPaymentRepository, transactionRepository, zoneId)
+        occurrenceExceptionRepository = RecurringOccurrenceExceptionRepository(occurrenceExceptionDao)
+        occurrenceManager = RecurringOccurrenceManager(transactionRepository, recurringPaymentRepository, occurrenceExceptionRepository, zoneId)
+        generator = RecurringPaymentGenerator(recurringPaymentRepository, transactionRepository, occurrenceExceptionRepository, zoneId)
     }
 
     private fun millisFor(date: LocalDate) = date.atStartOfDay(zoneId).toInstant().toEpochMilli()

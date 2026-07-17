@@ -9,6 +9,8 @@ import com.aradrotem.spendwise.data.local.TransactionEntity
 import com.aradrotem.spendwise.data.local.TransactionType
 import com.aradrotem.spendwise.data.repository.CategoryRepository
 import com.aradrotem.spendwise.data.repository.TransactionRepository
+import com.aradrotem.spendwise.domain.RecurringOccurrenceManager
+import com.aradrotem.spendwise.ui.components.transactionPrimaryText
 import com.aradrotem.spendwise.ui.format.formatAmountInCents
 import com.aradrotem.spendwise.ui.format.hasTooManyDecimalPlaces
 import com.aradrotem.spendwise.ui.format.parseAmountToCents
@@ -29,6 +31,7 @@ import kotlinx.coroutines.launch
 class AddTransactionViewModel(
     private val transactionRepository: TransactionRepository,
     private val categoryRepository: CategoryRepository,
+    private val recurringOccurrenceManager: RecurringOccurrenceManager,
     private val transactionId: Long? = null
 ) : ViewModel() {
 
@@ -51,11 +54,14 @@ class AddTransactionViewModel(
                     _uiState.update {
                         it.copy(
                             type = existing.type,
+                            title = transactionPrimaryText(existing),
                             amountText = formatAmountInCents(existing.amountInCents),
                             category = existing.category,
                             dateMillis = existing.timestamp,
                             note = existing.note,
-                            isLoading = false
+                            isLoading = false,
+                            isGeneratedOccurrence = existing.isAutomaticallyGenerated,
+                            scheduledYearMonth = existing.scheduledYearMonth
                         )
                     }
                 } else {
@@ -66,6 +72,9 @@ class AddTransactionViewModel(
     }
 
     fun onTypeChange(type: TransactionType) {
+        // A generated occurrence's type is fixed; the screen hides the selector in that mode,
+        // this is just a defensive backstop.
+        if (_uiState.value.isGeneratedOccurrence) return
         viewModelScope.launch {
             val validCategoryNames = categoryRepository.observeByType(type).first().map { it.name }
             _uiState.update { state ->
@@ -73,6 +82,10 @@ class AddTransactionViewModel(
                 state.copy(type = type, category = validCategory, categoryError = null)
             }
         }
+    }
+
+    fun onTitleChange(title: String) {
+        _uiState.update { it.copy(title = title, titleError = null, saveError = null) }
     }
 
     fun onAmountChange(amountText: String) {
@@ -84,7 +97,7 @@ class AddTransactionViewModel(
     }
 
     fun onDateChange(dateMillis: Long) {
-        _uiState.update { it.copy(dateMillis = dateMillis) }
+        _uiState.update { it.copy(dateMillis = dateMillis, saveError = null) }
     }
 
     fun onNoteChange(note: String) {
@@ -96,6 +109,7 @@ class AddTransactionViewModel(
         if (state.isSaving) return
 
         val amountInCents = parseAmountToCents(state.amountText)
+        val titleError = if (state.isGeneratedOccurrence && state.title.isBlank()) "Title is required" else null
         val amountError = when {
             state.amountText.isBlank() -> "Amount is required"
             hasTooManyDecimalPlaces(state.amountText) -> "Enter an amount with up to 2 decimal places."
@@ -105,8 +119,8 @@ class AddTransactionViewModel(
         }
         val categoryError = if (state.category == null) "Category is required" else null
 
-        if (amountError != null || categoryError != null) {
-            _uiState.update { it.copy(amountError = amountError, categoryError = categoryError) }
+        if (titleError != null || amountError != null || categoryError != null) {
+            _uiState.update { it.copy(titleError = titleError, amountError = amountError, categoryError = categoryError) }
             return
         }
 
@@ -116,8 +130,26 @@ class AddTransactionViewModel(
         _uiState.update { it.copy(isSaving = true, saveError = null) }
 
         viewModelScope.launch {
+            val id = transactionId
+            if (id != null && state.isGeneratedOccurrence) {
+                recurringOccurrenceManager.editOccurrenceOnly(
+                    transactionId = id,
+                    title = state.title.trim(),
+                    amountInCents = validAmountInCents,
+                    category = validCategory,
+                    note = state.note.trim(),
+                    timestamp = state.dateMillis
+                )
+                    .onSuccess { _uiState.update { it.copy(isSaving = false, isSaved = true) } }
+                    .onFailure { error ->
+                        _uiState.update {
+                            it.copy(isSaving = false, saveError = error.message ?: "Could not save the transaction. Please try again.")
+                        }
+                    }
+                return@launch
+            }
+
             try {
-                val id = transactionId
                 if (id != null) {
                     transactionRepository.update(
                         TransactionEntity(
@@ -155,9 +187,10 @@ class AddTransactionViewModel(
         fun factory(
             transactionRepository: TransactionRepository,
             categoryRepository: CategoryRepository,
+            recurringOccurrenceManager: RecurringOccurrenceManager,
             transactionId: Long? = null
         ) = viewModelFactory {
-            initializer { AddTransactionViewModel(transactionRepository, categoryRepository, transactionId) }
+            initializer { AddTransactionViewModel(transactionRepository, categoryRepository, recurringOccurrenceManager, transactionId) }
         }
     }
 }

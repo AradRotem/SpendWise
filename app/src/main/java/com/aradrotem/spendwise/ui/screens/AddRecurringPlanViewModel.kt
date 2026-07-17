@@ -10,6 +10,7 @@ import com.aradrotem.spendwise.data.local.TransactionType
 import com.aradrotem.spendwise.data.repository.CategoryRepository
 import com.aradrotem.spendwise.data.repository.RecurringPaymentRepository
 import com.aradrotem.spendwise.data.repository.TransactionRepository
+import com.aradrotem.spendwise.domain.RecurringOccurrenceManager
 import com.aradrotem.spendwise.domain.RecurringPaymentGenerator
 import com.aradrotem.spendwise.ui.format.formatAmountInCents
 import com.aradrotem.spendwise.ui.format.hasTooManyDecimalPlaces
@@ -32,10 +33,18 @@ class AddRecurringPlanViewModel(
     private val categoryRepository: CategoryRepository,
     private val transactionRepository: TransactionRepository,
     private val recurringPaymentGenerator: RecurringPaymentGenerator,
-    private val planId: Long? = null
+    private val recurringOccurrenceManager: RecurringOccurrenceManager,
+    private val planId: Long? = null,
+    private val occurrenceTransactionId: Long? = null
 ) : ViewModel() {
 
-    private val _uiState = MutableStateFlow(AddRecurringPlanUiState(planId = planId, isLoading = planId != null))
+    private val _uiState = MutableStateFlow(
+        AddRecurringPlanUiState(
+            planId = planId,
+            isLoading = planId != null,
+            occurrenceTransactionId = occurrenceTransactionId
+        )
+    )
     val uiState: StateFlow<AddRecurringPlanUiState> = _uiState.asStateFlow()
 
     // Income for Monthly salary, Expense for the other two plan types.
@@ -53,6 +62,7 @@ class AddRecurringPlanViewModel(
                 val plan = recurringPaymentRepository.getById(id)
                 if (plan != null) {
                     val generatedCount = transactionRepository.countGeneratedForPlan(id)
+                    val occurrenceMonth = occurrenceTransactionId?.let { transactionRepository.getById(it)?.scheduledYearMonth }
                     _uiState.update {
                         it.copy(
                             isLoading = false,
@@ -68,7 +78,8 @@ class AddRecurringPlanViewModel(
                             totalAmountText = plan.totalAmountInCents?.let(::formatAmountInCents) ?: "",
                             installmentCountText = plan.totalInstallments?.toString() ?: "",
                             firstPaymentDateMillis = plan.firstPaymentDateMillis,
-                            generatedInstallmentCount = generatedCount
+                            generatedInstallmentCount = generatedCount,
+                            occurrenceScheduledYearMonth = occurrenceMonth
                         )
                     }
                 } else {
@@ -217,7 +228,7 @@ class AddRecurringPlanViewModel(
                     endDateMillis = endDateMillis
                 )
             }
-            onSaveResult(result)
+            onSaveResult(result, state.occurrenceTransactionId, state.title.trim(), validAmount, validCategory, state.note.trim())
         }
     }
 
@@ -282,16 +293,36 @@ class AddRecurringPlanViewModel(
                     firstPaymentDateMillis = state.firstPaymentDateMillis
                 )
             }
-            onSaveResult(result)
+            // Installment amounts are never edited retroactively (see RecurringOccurrenceManager),
+            // so amountInCents is always null here regardless of what's on screen.
+            onSaveResult(result, state.occurrenceTransactionId, state.title.trim(), null, validCategory, state.note.trim())
         }
     }
 
-    private suspend fun onSaveResult(result: Result<Unit>) {
+    private suspend fun onSaveResult(
+        result: Result<Unit>,
+        occurrenceTransactionId: Long?,
+        title: String,
+        amountInCentsForOccurrence: Long?,
+        category: String,
+        note: String
+    ) {
         result
             .onSuccess {
                 // Immediately materialize any already-due payment (e.g. a start/first-payment
                 // date of today or earlier) instead of waiting for the next app start/resume.
                 recurringPaymentGenerator.generateDuePayments()
+                // "Edit this and future": also propagate the new values to the occurrence the
+                // user started from, plus any later already-generated, non-overridden rows.
+                if (occurrenceTransactionId != null) {
+                    recurringOccurrenceManager.applyEditToOccurrenceAndFuture(
+                        occurrenceTransactionId = occurrenceTransactionId,
+                        title = title,
+                        amountInCents = amountInCentsForOccurrence,
+                        category = category,
+                        note = note
+                    )
+                }
                 _uiState.update { it.copy(isSaving = false, isSaved = true) }
             }
             .onFailure { error ->
@@ -307,7 +338,9 @@ class AddRecurringPlanViewModel(
             categoryRepository: CategoryRepository,
             transactionRepository: TransactionRepository,
             recurringPaymentGenerator: RecurringPaymentGenerator,
-            planId: Long? = null
+            recurringOccurrenceManager: RecurringOccurrenceManager,
+            planId: Long? = null,
+            occurrenceTransactionId: Long? = null
         ) = viewModelFactory {
             initializer {
                 AddRecurringPlanViewModel(
@@ -315,7 +348,9 @@ class AddRecurringPlanViewModel(
                     categoryRepository,
                     transactionRepository,
                     recurringPaymentGenerator,
-                    planId
+                    recurringOccurrenceManager,
+                    planId,
+                    occurrenceTransactionId
                 )
             }
         }

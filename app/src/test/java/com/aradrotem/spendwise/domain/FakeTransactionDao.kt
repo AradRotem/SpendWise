@@ -73,4 +73,53 @@ class FakeTransactionDao : TransactionDao {
 
     override fun observeByPlan(planId: Long): Flow<List<TransactionEntity>> =
         flowOf(rows.filter { it.recurringPlanId == planId })
+
+    override suspend fun getGeneratedAfter(planId: Long, yearMonthExclusive: String): List<TransactionEntity> =
+        rows.filter {
+            it.recurringPlanId == planId && it.isAutomaticallyGenerated &&
+                it.scheduledYearMonth != null && it.scheduledYearMonth > yearMonthExclusive
+        }.sortedBy { it.scheduledYearMonth }
+
+    override suspend fun deleteGeneratedFromMonth(planId: Long, yearMonthInclusive: String) {
+        rows.removeAll {
+            it.recurringPlanId == planId && it.isAutomaticallyGenerated &&
+                it.scheduledYearMonth != null && it.scheduledYearMonth >= yearMonthInclusive
+        }
+    }
+
+    override suspend fun updateFutureGeneratedTransactionsWithAmount(
+        planId: Long,
+        yearMonthExclusive: String,
+        amountInCents: Long,
+        category: String,
+        note: String,
+        sourceTitle: String
+    ) {
+        applyFutureUpdate(planId, yearMonthExclusive) {
+            it.copy(amountInCents = amountInCents, category = category, note = note, sourceTitle = sourceTitle)
+        }
+    }
+
+    override suspend fun updateFutureGeneratedTransactionsMetadataOnly(
+        planId: Long,
+        yearMonthExclusive: String,
+        category: String,
+        note: String,
+        sourceTitle: String
+    ) {
+        applyFutureUpdate(planId, yearMonthExclusive) {
+            it.copy(category = category, note = note, sourceTitle = sourceTitle)
+        }
+    }
+
+    private fun applyFutureUpdate(planId: Long, yearMonthExclusive: String, transform: (TransactionEntity) -> TransactionEntity) {
+        for (index in rows.indices) {
+            val row = rows[index]
+            val eligible = row.recurringPlanId == planId && row.isAutomaticallyGenerated && !row.isOccurrenceModified &&
+                row.scheduledYearMonth != null && row.scheduledYearMonth > yearMonthExclusive
+            if (eligible) {
+                rows[index] = transform(row)
+            }
+        }
+    }
 }

@@ -119,3 +119,28 @@ val MIGRATION_4_5: Migration = object : Migration(4, 5) {
         connection.execSQL("ALTER TABLE `transactions` ADD COLUMN `sourceTitle` TEXT")
     }
 }
+
+// Adds occurrence-level management (Step 11): a durable exception table recording plan+month
+// combinations the user intentionally deleted/skipped (so catch-up generation never recreates
+// them - deleting the transaction row alone would free up its unique slot and let it come back),
+// plus a flag marking a transaction as individually edited (so a later plan-wide "edit this and
+// future" never clobbers a deliberate per-occurrence override). Non-destructive: only creates a
+// new table and adds one nullable/defaulted column.
+val MIGRATION_5_6: Migration = object : Migration(5, 6) {
+    override fun migrate(connection: SQLiteConnection) {
+        connection.execSQL(
+            "CREATE TABLE IF NOT EXISTS `recurring_occurrence_exceptions` (" +
+                "`id` INTEGER PRIMARY KEY AUTOINCREMENT NOT NULL, " +
+                "`recurringPlanId` INTEGER NOT NULL, " +
+                "`scheduledYearMonth` TEXT NOT NULL, " +
+                "`exceptionType` TEXT NOT NULL, " +
+                "`createdAt` INTEGER NOT NULL)"
+        )
+        connection.execSQL(
+            "CREATE UNIQUE INDEX IF NOT EXISTS `index_recurring_occurrence_exceptions_recurringPlanId_scheduledYearMonth` " +
+                "ON `recurring_occurrence_exceptions` (`recurringPlanId`, `scheduledYearMonth`)"
+        )
+
+        connection.execSQL("ALTER TABLE `transactions` ADD COLUMN `isOccurrenceModified` INTEGER NOT NULL DEFAULT 0")
+    }
+}

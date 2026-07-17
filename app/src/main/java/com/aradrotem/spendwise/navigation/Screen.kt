@@ -12,7 +12,14 @@ sealed class Screen(val route: String) {
     data object Categories : Screen("categories")
     data object RecurringPayments : Screen("recurring_payments")
     data object AddRecurringPayment : Screen("add_recurring_payment")
-    data object EditRecurringPayment : Screen("edit_recurring_payment/{planId}") {
-        fun createRoute(planId: Long) = "edit_recurring_payment/$planId"
+    data object EditRecurringPayment : Screen("edit_recurring_payment/{planId}?occurrenceTransactionId={occurrenceTransactionId}") {
+        // occurrenceTransactionId is set only for "Edit this and future transactions" (see
+        // TransactionsScreen): it tells the edit screen to also propagate the plan edit to that
+        // specific occurrence and later non-overridden ones. Absent for a plain "Edit plan" or
+        // "Open recurring plan" navigation.
+        fun createRoute(planId: Long, occurrenceTransactionId: Long? = null): String {
+            val base = "edit_recurring_payment/$planId"
+            return if (occurrenceTransactionId != null) "$base?occurrenceTransactionId=$occurrenceTransactionId" else base
+        }
     }
 }

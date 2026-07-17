@@ -47,6 +47,7 @@ fun AddTransactionScreen(
         factory = AddTransactionViewModel.factory(
             (LocalContext.current.applicationContext as SpendWiseApplication).transactionRepository,
             (LocalContext.current.applicationContext as SpendWiseApplication).categoryRepository,
+            (LocalContext.current.applicationContext as SpendWiseApplication).recurringOccurrenceManager,
             transactionId
         )
     )
@@ -102,16 +103,39 @@ fun AddTransactionScreen(
                 .verticalScroll(rememberScrollState()),
             verticalArrangement = Arrangement.spacedBy(16.dp)
         ) {
-            Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
-                TransactionType.entries.forEach { type ->
-                    val selected = type == uiState.type
-                    if (selected) {
-                        Button(onClick = { viewModel.onTypeChange(type) }) {
-                            Text(type.name)
-                        }
-                    } else {
-                        OutlinedButton(onClick = { viewModel.onTypeChange(type) }) {
-                            Text(type.name)
+            if (uiState.isGeneratedOccurrence) {
+                // This screen is reused for single-occurrence edits (see TransactionsScreen's
+                // "Edit this transaction" action). Type is fixed - changing Income/Expense on one
+                // occurrence of a recurring plan would be inconsistent with the rest of the series.
+                Text(
+                    "Editing this transaction only (${uiState.scheduledYearMonth.orEmpty()}). " +
+                        "The recurring plan and other months are not affected.",
+                    style = MaterialTheme.typography.bodySmall,
+                    color = MaterialTheme.colorScheme.onSurfaceVariant
+                )
+                Text("Type: ${uiState.type.name}", style = MaterialTheme.typography.labelLarge)
+
+                OutlinedTextField(
+                    value = uiState.title,
+                    onValueChange = viewModel::onTitleChange,
+                    label = { Text("Title") },
+                    singleLine = true,
+                    isError = uiState.titleError != null,
+                    supportingText = { uiState.titleError?.let { Text(it) } },
+                    modifier = Modifier.fillMaxWidth()
+                )
+            } else {
+                Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
+                    TransactionType.entries.forEach { type ->
+                        val selected = type == uiState.type
+                        if (selected) {
+                            Button(onClick = { viewModel.onTypeChange(type) }) {
+                                Text(type.name)
+                            }
+                        } else {
+                            OutlinedButton(onClick = { viewModel.onTypeChange(type) }) {
+                                Text(type.name)
+                            }
                         }
                     }
                 }
@@ -139,6 +163,13 @@ fun AddTransactionScreen(
                 dateMillis = uiState.dateMillis,
                 onDateSelected = viewModel::onDateChange
             )
+            if (uiState.isGeneratedOccurrence) {
+                Text(
+                    "Must stay within ${uiState.scheduledYearMonth.orEmpty()}.",
+                    style = MaterialTheme.typography.bodySmall,
+                    color = MaterialTheme.colorScheme.onSurfaceVariant
+                )
+            }
 
             OutlinedTextField(
                 value = uiState.note,

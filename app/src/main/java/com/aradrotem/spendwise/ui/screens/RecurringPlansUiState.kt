@@ -10,8 +10,13 @@ data class RecurringPlansUiState(
 
 data class RecurringPlanListItem(
     val plan: RecurringPaymentPlanEntity,
-    // Count of transactions already generated for this plan; used for installment progress
-    // ("3 of 12 payments").
+    // Count of transactions currently in history for this plan (already-generated minus any the
+    // user deleted); used for installment progress ("3 of 12 payments").
     val generatedCount: Int,
-    val nextDueDate: LocalDate?
+    val nextDueDate: LocalDate?,
+    // Count of persistent occurrence-exception rows for this plan (see
+    // RecurringOccurrenceExceptionEntity) - i.e. installments the user intentionally deleted and
+    // that must never regenerate. Only meaningful for Completed installment plans; see
+    // installmentProgressText in RecurringPaymentsScreen.
+    val deletedInstallmentOccurrences: Int
 )

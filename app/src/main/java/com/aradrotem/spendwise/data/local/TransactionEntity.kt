@@ -34,5 +34,10 @@ data class TransactionEntity(
     // Deliberately not re-read from the plan at display time: if the plan is later renamed or
     // deleted, historical transactions must keep showing the title that was active when they
     // were generated.
-    val sourceTitle: String? = null
+    val sourceTitle: String? = null,
+    // True once the user has edited this specific occurrence independently of its plan (see
+    // RecurringOccurrenceManager.editOccurrenceOnly). A bulk "edit this and future" update never
+    // touches rows with this set, so a deliberate per-occurrence override always sticks.
+    @ColumnInfo(defaultValue = "0")
+    val isOccurrenceModified: Boolean = false
 )
