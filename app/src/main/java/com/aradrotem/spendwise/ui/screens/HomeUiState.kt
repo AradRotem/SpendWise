@@ -6,11 +6,20 @@ data class HomeUiState(
     val isLoading: Boolean = true,
     val monthlyIncomeCents: Long = 0L,
     val monthlyExpenseCents: Long = 0L,
+    val previousMonthIncomeCents: Long = 0L,
+    val previousMonthExpenseCents: Long = 0L,
     val budgetOverview: BudgetOverview = BudgetOverview(),
     val topCategories: List<CategorySpending> = emptyList(),
     val recentTransactions: List<TransactionEntity> = emptyList()
 ) {
     val monthlyBalanceCents: Long get() = monthlyIncomeCents - monthlyExpenseCents
+    val previousMonthBalanceCents: Long get() = previousMonthIncomeCents - previousMonthExpenseCents
+
+    // Positive means "more than last month" for income/balance; for expenses positive means
+    // "spent more than last month" (not necessarily a bad thing to flag as negative in the UI).
+    val incomeChangeCents: Long get() = monthlyIncomeCents - previousMonthIncomeCents
+    val expenseChangeCents: Long get() = monthlyExpenseCents - previousMonthExpenseCents
+    val balanceChangeCents: Long get() = monthlyBalanceCents - previousMonthBalanceCents
 }
 
 data class BudgetOverview(

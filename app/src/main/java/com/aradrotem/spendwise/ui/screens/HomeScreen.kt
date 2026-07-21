@@ -77,31 +77,34 @@ private fun SummaryCardsSection(uiState: HomeUiState, modifier: Modifier = Modif
                 title = "Income",
                 amountCents = uiState.monthlyIncomeCents,
                 amountColor = MaterialTheme.colorScheme.primary,
+                changeCents = uiState.incomeChangeCents,
                 modifier = Modifier.weight(1f)
             )
             SummaryCard(
                 title = "Expenses",
                 amountCents = uiState.monthlyExpenseCents,
                 amountColor = MaterialTheme.colorScheme.error,
+                changeCents = uiState.expenseChangeCents,
                 modifier = Modifier.weight(1f)
             )
         }
-        BalanceCard(balanceCents = uiState.monthlyBalanceCents)
+        BalanceCard(balanceCents = uiState.monthlyBalanceCents, changeCents = uiState.balanceChangeCents)
     }
 }
 
 @Composable
-private fun SummaryCard(title: String, amountCents: Long, amountColor: Color, modifier: Modifier = Modifier) {
+private fun SummaryCard(title: String, amountCents: Long, amountColor: Color, changeCents: Long, modifier: Modifier = Modifier) {
     Card(modifier = modifier.fillMaxWidth()) {
         Column(modifier = Modifier.padding(16.dp)) {
             Text(title, style = MaterialTheme.typography.labelLarge, color = MaterialTheme.colorScheme.onSurfaceVariant)
             Text(formatAmountInCents(amountCents), style = MaterialTheme.typography.titleLarge, color = amountColor)
+            MonthOverMonthText(changeCents)
         }
     }
 }
 
 @Composable
-private fun BalanceCard(balanceCents: Long, modifier: Modifier = Modifier) {
+private fun BalanceCard(balanceCents: Long, changeCents: Long, modifier: Modifier = Modifier) {
     val color = when {
         balanceCents > 0L -> MaterialTheme.colorScheme.primary
         balanceCents < 0L -> MaterialTheme.colorScheme.error
@@ -116,8 +119,25 @@ private fun BalanceCard(balanceCents: Long, modifier: Modifier = Modifier) {
                 color = MaterialTheme.colorScheme.onSurfaceVariant
             )
             Text("$sign${formatAmountInCents(abs(balanceCents))}", style = MaterialTheme.typography.headlineMedium, color = color)
+            MonthOverMonthText(changeCents)
         }
     }
+}
+
+// Minimal month-over-month indicator shared by the income/expense/balance cards.
+@Composable
+private fun MonthOverMonthText(changeCents: Long, modifier: Modifier = Modifier) {
+    val sign = when {
+        changeCents > 0L -> "+"
+        changeCents < 0L -> "-"
+        else -> ""
+    }
+    Text(
+        "$sign${formatAmountInCents(abs(changeCents))} vs last month",
+        style = MaterialTheme.typography.bodySmall,
+        color = MaterialTheme.colorScheme.onSurfaceVariant,
+        modifier = modifier
+    )
 }
 
 @Composable

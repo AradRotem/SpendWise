@@ -34,6 +34,10 @@ import com.aradrotem.spendwise.data.local.TransactionEntity
 import com.aradrotem.spendwise.ui.components.TransactionRow
 import kotlinx.coroutines.launch
 
+// A generated transaction and its resolved action-menu info, always set together (see
+// openGeneratedActionMenu) so the two can never be observed independently/out of sync.
+private data class GeneratedActionMenuState(val transaction: TransactionEntity, val info: GeneratedTransactionActionInfo)
+
 @OptIn(ExperimentalFoundationApi::class)
 @Composable
 fun TransactionsScreen(
@@ -55,16 +59,29 @@ fun TransactionsScreen(
     var actionTransaction by remember { mutableStateOf<TransactionEntity?>(null) }
     var transactionPendingDelete by remember { mutableStateOf<TransactionEntity?>(null) }
 
-    var generatedActionTransaction by remember { mutableStateOf<TransactionEntity?>(null) }
-    var generatedActionInfo by remember { mutableStateOf<GeneratedTransactionActionInfo?>(null) }
+    // Transaction and its resolved action info are held as ONE state object, set in a single
+    // atomic assignment (see openGeneratedActionMenu below) rather than two separate
+    // mutableStateOf fields. This is general Compose hygiene - two independently-mutable fields
+    // for values that must always change together is a known footgun - but it is NOT what fixed
+    // the "Manage installment plan is missing" report: Logcat diagnosis confirmed that bug was
+    // actually correct behavior for a transaction whose recurringPlanId points at a genuinely
+    // deleted plan (see resolveGeneratedTransactionActionInfo). Kept as a worthwhile hardening
+    // change on its own merits, not as a fix for that specific report.
+    var generatedActionMenu by remember { mutableStateOf<GeneratedActionMenuState?>(null) }
     var occurrencePendingDelete by remember { mutableStateOf<TransactionEntity?>(null) }
     var occurrenceAndFuturePendingDelete by remember { mutableStateOf<TransactionEntity?>(null) }
     var laterGeneratedCount by remember { mutableStateOf(0) }
 
+    // Installment occurrences go through their own two-tier menu: each tier below owns its own
+    // transaction reference so only one dialog is ever eligible to render at a time, instead of
+    // layering boolean flags on top of the shared generatedActionMenu state.
+    var installmentAdvancedTransaction by remember { mutableStateOf<TransactionEntity?>(null) }
+    var installmentEditWarningTransaction by remember { mutableStateOf<TransactionEntity?>(null) }
+
     fun openGeneratedActionMenu(transaction: TransactionEntity) {
         coroutineScope.launch {
-            generatedActionInfo = viewModel.loadActionMenuInfo(transaction)
-            generatedActionTransaction = transaction
+            val info = viewModel.loadActionMenuInfo(transaction)
+            generatedActionMenu = GeneratedActionMenuState(transaction, info)
         }
     }
 
@@ -87,7 +104,7 @@ fun TransactionsScreen(
                             modifier = Modifier.combinedClickable(
                                 onClick = {},
                                 onLongClick = {
-                                    if (transaction.isAutomaticallyGenerated) {
+                                    if (shouldShowGeneratedActionMenu(transaction)) {
                                         openGeneratedActionMenu(transaction)
                                     } else {
                                         actionTransaction = transaction
@@ -126,38 +143,72 @@ fun TransactionsScreen(
         )
     }
 
-    if (generatedActionTransaction != null && generatedActionInfo != null) {
-        val transaction = generatedActionTransaction!!
-        val info = generatedActionInfo!!
-        GeneratedTransactionActionDialog(
-            info = info,
-            onEditThis = {
-                generatedActionTransaction = null
+    generatedActionMenu?.let { (transaction, info) ->
+        if (info.isInstallmentOccurrence) {
+            // Installment payments belong to one purchase, so day-to-day management routes to the
+            // plan screen; only "Advanced occurrence actions" exposes a single-row edit.
+            InstallmentOccurrenceActionDialog(
+                info = info,
+                onManagePlan = {
+                    generatedActionMenu = null
+                    transaction.recurringPlanId?.let(onOpenRecurringPlan)
+                },
+                onAdvancedActions = {
+                    generatedActionMenu = null
+                    installmentAdvancedTransaction = transaction
+                },
+                onCancel = { generatedActionMenu = null }
+            )
+        } else {
+            // Standing orders and recurring salary keep the more flexible flat menu, since each
+            // occurrence may legitimately differ, be skipped, or be changed on its own.
+            RecurringOccurrenceActionDialog(
+                info = info,
+                onEditThis = {
+                    generatedActionMenu = null
+                    onEditTransaction(transaction.id)
+                },
+                onEditThisAndFuture = {
+                    generatedActionMenu = null
+                    transaction.recurringPlanId?.let { onEditThisAndFuture(it, transaction.id) }
+                },
+                onRemoveThis = {
+                    generatedActionMenu = null
+                    occurrencePendingDelete = transaction
+                },
+                onRemoveThisAndFuture = {
+                    generatedActionMenu = null
+                    coroutineScope.launch {
+                        laterGeneratedCount = viewModel.countLaterGeneratedTransactions(transaction)
+                        occurrenceAndFuturePendingDelete = transaction
+                    }
+                },
+                onManagePlan = {
+                    generatedActionMenu = null
+                    transaction.recurringPlanId?.let(onOpenRecurringPlan)
+                },
+                onCancel = { generatedActionMenu = null }
+            )
+        }
+    }
+
+    installmentAdvancedTransaction?.let { transaction ->
+        InstallmentAdvancedActionDialog(
+            onEditRecordOnly = {
+                installmentAdvancedTransaction = null
+                installmentEditWarningTransaction = transaction
+            },
+            onCancel = { installmentAdvancedTransaction = null }
+        )
+    }
+
+    installmentEditWarningTransaction?.let { transaction ->
+        InstallmentEditWarningDialog(
+            onConfirm = {
+                installmentEditWarningTransaction = null
                 onEditTransaction(transaction.id)
             },
-            onEditThisAndFuture = {
-                generatedActionTransaction = null
-                transaction.recurringPlanId?.let { onEditThisAndFuture(it, transaction.id) }
-            },
-            onDeleteThis = {
-                generatedActionTransaction = null
-                occurrencePendingDelete = transaction
-            },
-            onDeleteThisAndFuture = {
-                generatedActionTransaction = null
-                coroutineScope.launch {
-                    laterGeneratedCount = viewModel.countLaterGeneratedTransactions(transaction)
-                    occurrenceAndFuturePendingDelete = transaction
-                }
-            },
-            onOpenPlan = {
-                generatedActionTransaction = null
-                transaction.recurringPlanId?.let(onOpenRecurringPlan)
-            },
-            onCancel = {
-                generatedActionTransaction = null
-                generatedActionInfo = null
-            }
+            onDismiss = { installmentEditWarningTransaction = null }
         )
     }
 
@@ -240,24 +291,140 @@ private fun DeleteConfirmationDialog(
     )
 }
 
-// Options for a single automatically generated transaction. Which scope each choice affects -
-// one month only, this month and future months, or the whole plan - is spelled out in the label
-// itself so the user never has to guess.
+// User-facing wording for recurring-occurrence actions, kept as named constants (not inline
+// string literals) so a pure JUnit test (see TransactionsLogicTest) can assert against the exact
+// same text the dialogs below show, without needing Compose UI testing. SpendWise only tracks
+// transactions - it never talks to a bank, card provider, or merchant - so none of this wording
+// may imply that editing or removing a record cancels a real external charge.
+const val LABEL_MANAGE_INSTALLMENT_PLAN = "Manage installment plan"
+const val LABEL_ADVANCED_OCCURRENCE_ACTIONS = "Advanced occurrence actions"
+// Shown in place of "Manage installment plan" when the source plan can no longer be found (e.g.
+// it was deleted) - see resolveGeneratedTransactionActionInfo.planExists. Explains the missing
+// button instead of silently omitting it.
+const val MESSAGE_ORIGINAL_INSTALLMENT_PLAN_MISSING = "The original installment plan no longer exists."
+const val LABEL_EDIT_RECORD_ONLY = "Edit this record only"
+const val WARNING_EDIT_INSTALLMENT_OCCURRENCE =
+    "This changes only this SpendWise record.\nIt does not change the installment plan or the actual payment."
+
+// Installments no longer expose single-occurrence removal at all (see this revision's spec): an
+// installment series is one purchase, and removing one payment from history would create
+// inconsistencies between the installment count, generated history, and plan completion state.
+// Kept as a pure function (not inlined in the Composable) so its exact, minimal action set is
+// directly assertable by a JUnit test without Compose UI testing.
+fun installmentAdvancedActionLabels(): List<String> = listOf(LABEL_EDIT_RECORD_ONLY)
+
+const val LABEL_EDIT_OCCURRENCE_ONLY = "Edit this occurrence only"
+const val LABEL_EDIT_OCCURRENCE_AND_FUTURE = "Edit this and future occurrences"
+const val LABEL_REMOVE_OCCURRENCE_FROM_HISTORY = "Remove this occurrence from history"
+const val LABEL_REMOVE_OCCURRENCE_AND_FUTURE_FROM_HISTORY = "Remove this and future occurrences from history"
+const val LABEL_MANAGE_RECURRING_PLAN = "Manage recurring plan"
+
+// First-level menu for a generated installment occurrence. Deliberately narrow - installment
+// payments belong to one purchase, so series-level changes are made on the plan screen, not here.
 @Composable
-private fun GeneratedTransactionActionDialog(
+private fun InstallmentOccurrenceActionDialog(
+    info: GeneratedTransactionActionInfo,
+    onManagePlan: () -> Unit,
+    onAdvancedActions: () -> Unit,
+    onCancel: () -> Unit
+) {
+    AlertDialog(
+        onDismissRequest = onCancel,
+        title = {
+            Text(text = "Installment options", modifier = Modifier.fillMaxWidth(), textAlign = TextAlign.Center)
+        },
+        text = {
+            Column(modifier = Modifier.fillMaxWidth(), verticalArrangement = Arrangement.spacedBy(4.dp)) {
+                if (info.planExists) {
+                    TextButton(onClick = onManagePlan, modifier = Modifier.fillMaxWidth()) {
+                        Text(LABEL_MANAGE_INSTALLMENT_PLAN)
+                    }
+                } else {
+                    Text(
+                        MESSAGE_ORIGINAL_INSTALLMENT_PLAN_MISSING,
+                        style = MaterialTheme.typography.bodySmall,
+                        color = MaterialTheme.colorScheme.onSurfaceVariant,
+                        modifier = Modifier.fillMaxWidth()
+                    )
+                }
+                TextButton(onClick = onAdvancedActions, modifier = Modifier.fillMaxWidth()) {
+                    Text(LABEL_ADVANCED_OCCURRENCE_ACTIONS)
+                }
+                TextButton(onClick = onCancel, modifier = Modifier.fillMaxWidth()) {
+                    Text("Cancel")
+                }
+            }
+        },
+        confirmButton = {}
+    )
+}
+
+// Second-level menu holding the occurrence-only actions for an installment - reached only through
+// "Advanced occurrence actions". Deliberately contains only a single-record edit: installments no
+// longer expose any occurrence-only remove/delete action (see installmentAdvancedActionLabels).
+@Composable
+private fun InstallmentAdvancedActionDialog(
+    onEditRecordOnly: () -> Unit,
+    onCancel: () -> Unit
+) {
+    AlertDialog(
+        onDismissRequest = onCancel,
+        title = {
+            Text(text = LABEL_ADVANCED_OCCURRENCE_ACTIONS, modifier = Modifier.fillMaxWidth(), textAlign = TextAlign.Center)
+        },
+        text = {
+            Column(modifier = Modifier.fillMaxWidth(), verticalArrangement = Arrangement.spacedBy(4.dp)) {
+                TextButton(onClick = onEditRecordOnly, modifier = Modifier.fillMaxWidth()) {
+                    Text(LABEL_EDIT_RECORD_ONLY)
+                }
+                TextButton(onClick = onCancel, modifier = Modifier.fillMaxWidth()) {
+                    Text("Cancel")
+                }
+            }
+        },
+        confirmButton = {}
+    )
+}
+
+@Composable
+private fun InstallmentEditWarningDialog(onConfirm: () -> Unit, onDismiss: () -> Unit) {
+    AlertDialog(
+        onDismissRequest = onDismiss,
+        title = { Text("Edit this record only?") },
+        text = { Text(WARNING_EDIT_INSTALLMENT_OCCURRENCE) },
+        confirmButton = {
+            TextButton(onClick = onConfirm) {
+                Text("Continue")
+            }
+        },
+        dismissButton = {
+            TextButton(onClick = onDismiss) {
+                Text("Cancel")
+            }
+        }
+    )
+}
+
+// Flat menu for a standing-order or recurring-salary occurrence. These stay more flexible than
+// installments because each occurrence may legitimately differ, be skipped, or be changed on its
+// own. Which scope each choice affects - one occurrence, this and future occurrences, or the
+// whole plan - is spelled out in the label itself so the user never has to guess, and none of it
+// implies SpendWise is cancelling a real external charge.
+@Composable
+private fun RecurringOccurrenceActionDialog(
     info: GeneratedTransactionActionInfo,
     onEditThis: () -> Unit,
     onEditThisAndFuture: () -> Unit,
-    onDeleteThis: () -> Unit,
-    onDeleteThisAndFuture: () -> Unit,
-    onOpenPlan: () -> Unit,
+    onRemoveThis: () -> Unit,
+    onRemoveThisAndFuture: () -> Unit,
+    onManagePlan: () -> Unit,
     onCancel: () -> Unit
 ) {
     AlertDialog(
         onDismissRequest = onCancel,
         title = {
             Text(
-                text = "Recurring transaction options",
+                text = "Recurring occurrence options",
                 modifier = Modifier.fillMaxWidth(),
                 textAlign = TextAlign.Center
             )
@@ -268,24 +435,24 @@ private fun GeneratedTransactionActionDialog(
                 verticalArrangement = Arrangement.spacedBy(4.dp)
             ) {
                 TextButton(onClick = onEditThis, modifier = Modifier.fillMaxWidth()) {
-                    Text("Edit this transaction")
+                    Text(LABEL_EDIT_OCCURRENCE_ONLY)
                 }
                 if (info.canActOnFuture) {
                     TextButton(onClick = onEditThisAndFuture, modifier = Modifier.fillMaxWidth()) {
-                        Text("Edit this and future transactions")
+                        Text(LABEL_EDIT_OCCURRENCE_AND_FUTURE)
                     }
                 }
-                TextButton(onClick = onDeleteThis, modifier = Modifier.fillMaxWidth()) {
-                    Text("Delete this transaction", color = MaterialTheme.colorScheme.error)
+                TextButton(onClick = onRemoveThis, modifier = Modifier.fillMaxWidth()) {
+                    Text(LABEL_REMOVE_OCCURRENCE_FROM_HISTORY, color = MaterialTheme.colorScheme.error)
                 }
                 if (info.canActOnFuture) {
-                    TextButton(onClick = onDeleteThisAndFuture, modifier = Modifier.fillMaxWidth()) {
-                        Text("Delete this and future transactions", color = MaterialTheme.colorScheme.error)
+                    TextButton(onClick = onRemoveThisAndFuture, modifier = Modifier.fillMaxWidth()) {
+                        Text(LABEL_REMOVE_OCCURRENCE_AND_FUTURE_FROM_HISTORY, color = MaterialTheme.colorScheme.error)
                     }
                 }
                 if (info.planExists) {
-                    TextButton(onClick = onOpenPlan, modifier = Modifier.fillMaxWidth()) {
-                        Text("Open recurring plan")
+                    TextButton(onClick = onManagePlan, modifier = Modifier.fillMaxWidth()) {
+                        Text(LABEL_MANAGE_RECURRING_PLAN)
                     }
                 }
                 TextButton(onClick = onCancel, modifier = Modifier.fillMaxWidth()) {
@@ -301,16 +468,16 @@ private fun GeneratedTransactionActionDialog(
 private fun DeleteOccurrenceDialog(onConfirm: () -> Unit, onDismiss: () -> Unit) {
     AlertDialog(
         onDismissRequest = onDismiss,
-        title = { Text("Delete this transaction?") },
+        title = { Text("Remove this occurrence from history?") },
         text = {
             Text(
-                "This transaction will be removed and will not be regenerated. " +
-                    "The recurring plan will continue for other months."
+                "This removes only this record from SpendWise history and it will not be regenerated. " +
+                    "It does not cancel the real payment. The recurring plan will continue for other occurrences."
             )
         },
         confirmButton = {
             TextButton(onClick = onConfirm) {
-                Text("Delete this transaction", color = MaterialTheme.colorScheme.error)
+                Text(LABEL_REMOVE_OCCURRENCE_FROM_HISTORY, color = MaterialTheme.colorScheme.error)
             }
         },
         dismissButton = {
@@ -325,21 +492,22 @@ private fun DeleteOccurrenceDialog(onConfirm: () -> Unit, onDismiss: () -> Unit)
 private fun DeleteOccurrenceAndFutureDialog(laterCount: Int, onConfirm: () -> Unit, onDismiss: () -> Unit) {
     AlertDialog(
         onDismissRequest = onDismiss,
-        title = { Text("Delete this and future transactions?") },
+        title = { Text("Remove this and future occurrences from history?") },
         text = {
             val extra = if (laterCount > 0) {
-                " and $laterCount later generated transaction${if (laterCount == 1) "" else "s"}"
+                " and $laterCount later generated occurrence${if (laterCount == 1) "" else "s"}"
             } else {
                 ""
             }
             Text(
-                "This transaction$extra will be removed. Earlier transactions will remain in " +
-                    "your history. No future transactions will be generated from this plan."
+                "This occurrence$extra will be removed from SpendWise history. It does not cancel any real " +
+                    "payments. Earlier occurrences will remain in your history. No future occurrences will be " +
+                    "generated from this plan."
             )
         },
         confirmButton = {
             TextButton(onClick = onConfirm) {
-                Text("Delete this and future", color = MaterialTheme.colorScheme.error)
+                Text(LABEL_REMOVE_OCCURRENCE_AND_FUTURE_FROM_HISTORY, color = MaterialTheme.colorScheme.error)
             }
         },
         dismissButton = {

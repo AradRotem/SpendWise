@@ -13,3 +13,10 @@ fun currentMonthRange(zoneId: ZoneId = ZoneId.systemDefault()): MonthRange {
     val endExclusive = firstOfMonth.plusMonths(1).atStartOfDay(zoneId).toInstant().toEpochMilli()
     return MonthRange(start, endExclusive)
 }
+
+fun previousMonthRange(zoneId: ZoneId = ZoneId.systemDefault()): MonthRange {
+    val firstOfPreviousMonth = LocalDate.now(zoneId).withDayOfMonth(1).minusMonths(1)
+    val start = firstOfPreviousMonth.atStartOfDay(zoneId).toInstant().toEpochMilli()
+    val endExclusive = firstOfPreviousMonth.plusMonths(1).atStartOfDay(zoneId).toInstant().toEpochMilli()
+    return MonthRange(start, endExclusive)
+}

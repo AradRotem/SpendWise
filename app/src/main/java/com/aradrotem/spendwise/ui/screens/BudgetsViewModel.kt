@@ -5,6 +5,7 @@ import androidx.lifecycle.viewModelScope
 import androidx.lifecycle.viewmodel.initializer
 import androidx.lifecycle.viewmodel.viewModelFactory
 import com.aradrotem.spendwise.data.local.BudgetEntity
+import com.aradrotem.spendwise.data.local.CategoryMonthlyTotal
 import com.aradrotem.spendwise.data.local.TransactionType
 import com.aradrotem.spendwise.data.repository.BudgetRepository
 import com.aradrotem.spendwise.data.repository.CategoryRepository
@@ -54,12 +55,7 @@ class BudgetsViewModel(
         combine(
             budgetRepository.observeAll(),
             transactionRepository.observeExpenseTotalsByCategory(range.startMillis, range.endExclusiveMillis)
-        ) { budgets, totals ->
-            val totalsByCategory = totals.associateBy({ it.category }, { it.totalCents })
-            budgets
-                .map { budget -> BudgetProgress(budget, totalsByCategory[budget.categoryName] ?: 0L) }
-                .sortedWith { a, b -> compareCategoryNames(a.categoryName, b.categoryName) }
-        }
+        ) { budgets, totals -> computeBudgetProgress(budgets, totals) }
     }
 
     fun onAddBudgetClick() {
@@ -150,4 +146,14 @@ class BudgetsViewModel(
             initializer { BudgetsViewModel(budgetRepository, categoryRepository, transactionRepository) }
         }
     }
+}
+
+// Pure transform pairing each budget with its current-month spend - kept as a top-level function
+// (not a ViewModel member) so it's directly unit-testable without a Main dispatcher, mirroring
+// resolveGeneratedTransactionActionInfo in TransactionsViewModel.
+fun computeBudgetProgress(budgets: List<BudgetEntity>, totals: List<CategoryMonthlyTotal>): List<BudgetProgress> {
+    val totalsByCategory = totals.associateBy({ it.category }, { it.totalCents })
+    return budgets
+        .map { budget -> BudgetProgress(budget, totalsByCategory[budget.categoryName] ?: 0L) }
+        .sortedWith { a, b -> compareCategoryNames(a.categoryName, b.categoryName) }
 }

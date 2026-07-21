@@ -42,11 +42,23 @@ class FakeTransactionDao : TransactionDao {
     override suspend fun countByCategoryAndType(categoryName: String, type: TransactionType): Int =
         rows.count { it.category == categoryName && it.type == type }
 
+    // Mirrors the real Room query: EXPENSE-only, half-open [start, endExclusive) range, grouped
+    // by category and sorted highest-to-lowest.
     override fun observeExpenseTotalsByCategory(startTimestamp: Long, endTimestampExclusive: Long): Flow<List<CategoryMonthlyTotal>> =
-        flowOf(emptyList())
+        flowOf(
+            rows.asSequence()
+                .filter { it.type == TransactionType.EXPENSE && it.timestamp >= startTimestamp && it.timestamp < endTimestampExclusive }
+                .groupBy { it.category }
+                .map { (category, entries) -> CategoryMonthlyTotal(category, entries.sumOf { it.amountInCents }) }
+                .sortedByDescending { it.totalCents }
+        )
 
+    // Mirrors the real Room query: half-open [start, endExclusive) range, COALESCE-style zero sum.
     override fun observeTotalByType(type: TransactionType, startTimestamp: Long, endTimestampExclusive: Long): Flow<Long> =
-        flowOf(0L)
+        flowOf(
+            rows.filter { it.type == type && it.timestamp >= startTimestamp && it.timestamp < endTimestampExclusive }
+                .sumOf { it.amountInCents }
+        )
 
     override fun observeRecent(limit: Int): Flow<List<TransactionEntity>> = flowOf(rows.take(limit))
 

@@ -82,6 +82,13 @@ fun resolveGeneratedTransactionActionInfo(
     val planIsLive = plan != null && plan.status != RecurringPlanStatus.STOPPED && plan.status != RecurringPlanStatus.COMPLETED
     return GeneratedTransactionActionInfo(
         planExists = plan != null,
-        canActOnFuture = planIsLive && !isLastInstallment
+        canActOnFuture = planIsLive && !isLastInstallment,
+        isInstallmentOccurrence = transaction.installmentNumber != null
     )
 }
+
+// Manual, non-recurring transactions keep their normal direct Edit/Delete menu; only generated
+// occurrences get the recurring-aware action menu (installment two-tier or standing-order/salary
+// flexible menu - see TransactionsScreen). Kept as a top-level pure function so this routing
+// decision is directly unit-testable.
+fun shouldShowGeneratedActionMenu(transaction: TransactionEntity): Boolean = transaction.isAutomaticallyGenerated

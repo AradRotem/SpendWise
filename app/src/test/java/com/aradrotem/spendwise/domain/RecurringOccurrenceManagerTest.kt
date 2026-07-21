@@ -169,6 +169,32 @@ class RecurringOccurrenceManagerTest {
         assertTrue(result.isFailure)
     }
 
+    // Step 13: installment occurrences are edited one at a time through "Advanced occurrence
+    // actions" on the Transactions screen, but the underlying guarantee - editing one installment
+    // never touches its siblings or the plan definition itself - was already provided by
+    // editOccurrenceOnly and just needed direct installment-plan coverage.
+    @Test
+    fun editOccurrenceOnly_installmentPlan_doesNotAffectSiblingInstallmentsOrThePlan() = runBlocking {
+        val planId = createInstallmentPlan(totalInstallments = 3, totalAmountInCents = 90_000L)
+        generator.generateDuePayments(today = LocalDate.of(2026, 3, 1))
+        val planBefore = planDao.allRows.single { it.id == planId }
+        val second = transactionDao.allRows.single { it.installmentNumber == 2 }
+
+        val result = manager.editOccurrenceOnly(
+            transactionId = second.id, title = "Laptop (adjusted)", amountInCents = 12_345L,
+            category = "ELECTRONICS", note = "price correction", timestamp = second.timestamp
+        )
+
+        assertTrue(result.isSuccess)
+        val siblings = transactionDao.allRows.filter { it.id != second.id }
+        assertTrue(siblings.all { it.amountInCents == 30_000L })
+        assertTrue(siblings.all { it.category == "SHOPPING" })
+        assertTrue(siblings.all { !it.isOccurrenceModified })
+
+        val planAfter = planDao.allRows.single { it.id == planId }
+        assertEquals(planBefore, planAfter)
+    }
+
     @Test
     fun editOccurrenceOnly_skipsMonthCheckForManualTransactions() = runBlocking {
         val manual = insertManualTransaction()
@@ -325,6 +351,28 @@ class RecurringOccurrenceManagerTest {
 
         assertTrue(secondResult.isSuccess)
         assertEquals(1, occurrenceExceptionDao.allRows.size)
+    }
+
+    // Step 13: "Remove from history" for an installment occurrence must behave like any other
+    // occurrence-only delete - it must not stop, complete, or otherwise touch the plan definition,
+    // unlike deleteThisAndFuture which deliberately caps the plan.
+    @Test
+    fun deleteOccurrenceOnly_installmentPlan_doesNotStopOrChangeThePlan() = runBlocking {
+        val planId = createInstallmentPlan(totalInstallments = 3, totalAmountInCents = 90_000L)
+        // Default plan starts 2026-01-15; by 2026-03-01 only installments 1 (Jan 15) and 2 (Feb 15)
+        // are due, leaving installment 3 (Mar 15) ungenerated - a non-final delete for this test.
+        generator.generateDuePayments(today = LocalDate.of(2026, 3, 1))
+        val planBefore = planDao.allRows.single { it.id == planId }
+        val first = transactionDao.allRows.single { it.installmentNumber == 1 }
+
+        val result = manager.deleteOccurrenceOnly(first)
+
+        assertTrue(result.isSuccess)
+        val planAfter = planDao.allRows.single { it.id == planId }
+        assertEquals(planBefore.status, planAfter.status)
+        assertEquals(planBefore.totalInstallments, planAfter.totalInstallments)
+        assertEquals(setOf("2026-01"), occurrenceExceptionRepository.getSkippedMonths(planId))
+        assertEquals(listOf(2), transactionDao.allRows.mapNotNull { it.installmentNumber })
     }
 
     // --- countLaterGeneratedTransactions ----------------------------------------------------------
