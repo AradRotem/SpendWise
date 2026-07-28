@@ -16,6 +16,7 @@ import androidx.compose.ui.unit.dp
 fun SettingsScreen(
     onNavigateToCategories: () -> Unit,
     onNavigateToRecurringPayments: () -> Unit,
+    onNavigateToMonthlyReport: () -> Unit,
     modifier: Modifier = Modifier
 ) {
     Column(modifier = modifier.fillMaxSize()) {
@@ -34,6 +35,13 @@ fun SettingsScreen(
             modifier = Modifier
                 .fillMaxWidth()
                 .clickable(onClick = onNavigateToRecurringPayments)
+        )
+        ListItem(
+            headlineContent = { Text("Monthly report") },
+            supportingContent = { Text("View and share income, expenses, and budgets for any month") },
+            modifier = Modifier
+                .fillMaxWidth()
+                .clickable(onClick = onNavigateToMonthlyReport)
         )
     }
 }

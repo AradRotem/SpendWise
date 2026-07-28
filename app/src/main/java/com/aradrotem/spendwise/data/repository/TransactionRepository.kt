@@ -13,6 +13,9 @@ class TransactionRepository(private val transactionDao: TransactionDao) {
     fun observeBetween(startTimestamp: Long, endTimestamp: Long): Flow<List<TransactionEntity>> =
         transactionDao.observeBetween(startTimestamp, endTimestamp)
 
+    fun observeInRange(startTimestamp: Long, endTimestampExclusive: Long): Flow<List<TransactionEntity>> =
+        transactionDao.observeInRange(startTimestamp, endTimestampExclusive)
+
     fun observeExpenseTotalsByCategory(startTimestamp: Long, endTimestampExclusive: Long): Flow<List<CategoryMonthlyTotal>> =
         transactionDao.observeExpenseTotalsByCategory(startTimestamp, endTimestampExclusive)
 

@@ -30,6 +30,16 @@ interface TransactionDao {
     )
     fun observeBetween(startTimestamp: Long, endTimestamp: Long): Flow<List<TransactionEntity>>
 
+    // Half-open range [startTimestamp, endTimestampExclusive), matching
+    // observeExpenseTotalsByCategory/observeTotalByType - unlike observeBetween (inclusive on
+    // both ends), this is safe to call with a month's [start, startOfNextMonth) boundary without
+    // risking double-counting a next-month transaction dated exactly at midnight.
+    @Query(
+        "SELECT * FROM transactions WHERE timestamp >= :startTimestamp AND timestamp < :endTimestampExclusive " +
+            "ORDER BY timestamp DESC"
+    )
+    fun observeInRange(startTimestamp: Long, endTimestampExclusive: Long): Flow<List<TransactionEntity>>
+
     @Query("SELECT * FROM transactions WHERE id = :id")
     suspend fun getById(id: Long): TransactionEntity?
 

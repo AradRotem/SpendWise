@@ -10,6 +10,7 @@ sealed class Screen(val route: String) {
         fun createRoute(transactionId: Long) = "edit_transaction/$transactionId"
     }
     data object Categories : Screen("categories")
+    data object MonthlyReport : Screen("monthly_report")
     data object RecurringPayments : Screen("recurring_payments")
     data object AddRecurringPayment : Screen("add_recurring_payment")
     data object EditRecurringPayment : Screen("edit_recurring_payment/{planId}?occurrenceTransactionId={occurrenceTransactionId}") {

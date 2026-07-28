@@ -21,6 +21,7 @@ import com.aradrotem.spendwise.ui.screens.AddTransactionScreen
 import com.aradrotem.spendwise.ui.screens.BudgetsScreen
 import com.aradrotem.spendwise.ui.screens.CategoriesScreen
 import com.aradrotem.spendwise.ui.screens.HomeScreen
+import com.aradrotem.spendwise.ui.screens.MonthlyReportScreen
 import com.aradrotem.spendwise.ui.screens.RecurringPaymentsScreen
 import com.aradrotem.spendwise.ui.screens.SettingsScreen
 import com.aradrotem.spendwise.ui.screens.TransactionsScreen
@@ -33,7 +34,8 @@ fun SpendWiseApp() {
         currentRoute != Screen.EditTransaction.route &&
         currentRoute != Screen.Categories.route &&
         currentRoute != Screen.AddRecurringPayment.route &&
-        currentRoute != Screen.EditRecurringPayment.route
+        currentRoute != Screen.EditRecurringPayment.route &&
+        currentRoute != Screen.MonthlyReport.route
     // The Budgets and Recurring Payments screens each have their own "Add" action, so the global
     // "Add transaction" FAB is hidden there to avoid two competing add actions.
     val showFab = showBottomBar && currentRoute != Screen.Budgets.route && currentRoute != Screen.RecurringPayments.route
@@ -97,11 +99,15 @@ fun SpendWiseApp() {
             composable(Screen.Settings.route) {
                 SettingsScreen(
                     onNavigateToCategories = { navController.navigate(Screen.Categories.route) },
-                    onNavigateToRecurringPayments = { navController.navigate(Screen.RecurringPayments.route) }
+                    onNavigateToRecurringPayments = { navController.navigate(Screen.RecurringPayments.route) },
+                    onNavigateToMonthlyReport = { navController.navigate(Screen.MonthlyReport.route) }
                 )
             }
             composable(Screen.Categories.route) {
                 CategoriesScreen(onBack = { navController.popBackStack() })
+            }
+            composable(Screen.MonthlyReport.route) {
+                MonthlyReportScreen(onBack = { navController.popBackStack() })
             }
             composable(Screen.RecurringPayments.route) {
                 RecurringPaymentsScreen(

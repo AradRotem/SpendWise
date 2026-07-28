@@ -37,6 +37,9 @@ class FakeTransactionDao : TransactionDao {
     override fun observeBetween(startTimestamp: Long, endTimestamp: Long): Flow<List<TransactionEntity>> =
         flowOf(rows.filter { it.timestamp in startTimestamp..endTimestamp })
 
+    override fun observeInRange(startTimestamp: Long, endTimestampExclusive: Long): Flow<List<TransactionEntity>> =
+        flowOf(rows.filter { it.timestamp >= startTimestamp && it.timestamp < endTimestampExclusive })
+
     override suspend fun getById(id: Long): TransactionEntity? = rows.firstOrNull { it.id == id }
 
     override suspend fun countByCategoryAndType(categoryName: String, type: TransactionType): Int =
