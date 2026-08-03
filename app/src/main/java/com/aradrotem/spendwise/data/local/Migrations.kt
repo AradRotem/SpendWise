@@ -144,3 +144,67 @@ val MIGRATION_5_6: Migration = object : Migration(5, 6) {
         connection.execSQL("ALTER TABLE `transactions` ADD COLUMN `isOccurrenceModified` INTEGER NOT NULL DEFAULT 0")
     }
 }
+
+// Adds the Step 14 group-expense feature: groups, their members, shared expenses, and per-member
+// expense shares. Entirely new tables with foreign keys/indices only - non-destructive, does not
+// touch any existing transaction/category/budget/recurring-plan/recurring-exception data.
+val MIGRATION_6_7: Migration = object : Migration(6, 7) {
+    override fun migrate(connection: SQLiteConnection) {
+        connection.execSQL(
+            "CREATE TABLE IF NOT EXISTS `expense_groups` (" +
+                "`id` INTEGER PRIMARY KEY AUTOINCREMENT NOT NULL, " +
+                "`name` TEXT NOT NULL, " +
+                "`createdAtEpochMillis` INTEGER NOT NULL)"
+        )
+
+        connection.execSQL(
+            "CREATE TABLE IF NOT EXISTS `group_members` (" +
+                "`id` INTEGER PRIMARY KEY AUTOINCREMENT NOT NULL, " +
+                "`groupId` INTEGER NOT NULL, " +
+                "`name` TEXT NOT NULL, " +
+                "`createdAtEpochMillis` INTEGER NOT NULL, " +
+                "FOREIGN KEY(`groupId`) REFERENCES `expense_groups`(`id`) ON UPDATE NO ACTION ON DELETE CASCADE)"
+        )
+        connection.execSQL(
+            "CREATE INDEX IF NOT EXISTS `index_group_members_groupId` ON `group_members` (`groupId`)"
+        )
+
+        connection.execSQL(
+            "CREATE TABLE IF NOT EXISTS `group_expenses` (" +
+                "`id` INTEGER PRIMARY KEY AUTOINCREMENT NOT NULL, " +
+                "`groupId` INTEGER NOT NULL, " +
+                "`title` TEXT NOT NULL, " +
+                "`amountCents` INTEGER NOT NULL, " +
+                "`dateEpochDay` INTEGER NOT NULL, " +
+                "`paidByMemberId` INTEGER NOT NULL, " +
+                "`splitMethod` TEXT NOT NULL, " +
+                "`note` TEXT NOT NULL, " +
+                "`createdAtEpochMillis` INTEGER NOT NULL, " +
+                "FOREIGN KEY(`groupId`) REFERENCES `expense_groups`(`id`) ON UPDATE NO ACTION ON DELETE CASCADE, " +
+                "FOREIGN KEY(`paidByMemberId`) REFERENCES `group_members`(`id`) ON UPDATE NO ACTION ON DELETE NO ACTION)"
+        )
+        connection.execSQL(
+            "CREATE INDEX IF NOT EXISTS `index_group_expenses_groupId` ON `group_expenses` (`groupId`)"
+        )
+        connection.execSQL(
+            "CREATE INDEX IF NOT EXISTS `index_group_expenses_paidByMemberId` ON `group_expenses` (`paidByMemberId`)"
+        )
+
+        connection.execSQL(
+            "CREATE TABLE IF NOT EXISTS `group_expense_shares` (" +
+                "`id` INTEGER PRIMARY KEY AUTOINCREMENT NOT NULL, " +
+                "`expenseId` INTEGER NOT NULL, " +
+                "`memberId` INTEGER NOT NULL, " +
+                "`shareAmountCents` INTEGER NOT NULL, " +
+                "FOREIGN KEY(`expenseId`) REFERENCES `group_expenses`(`id`) ON UPDATE NO ACTION ON DELETE CASCADE, " +
+                "FOREIGN KEY(`memberId`) REFERENCES `group_members`(`id`) ON UPDATE NO ACTION ON DELETE NO ACTION)"
+        )
+        connection.execSQL(
+            "CREATE UNIQUE INDEX IF NOT EXISTS `index_group_expense_shares_expenseId_memberId` " +
+                "ON `group_expense_shares` (`expenseId`, `memberId`)"
+        )
+        connection.execSQL(
+            "CREATE INDEX IF NOT EXISTS `index_group_expense_shares_memberId` ON `group_expense_shares` (`memberId`)"
+        )
+    }
+}

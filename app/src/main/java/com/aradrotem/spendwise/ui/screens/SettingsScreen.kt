@@ -17,6 +17,7 @@ fun SettingsScreen(
     onNavigateToCategories: () -> Unit,
     onNavigateToRecurringPayments: () -> Unit,
     onNavigateToMonthlyReport: () -> Unit,
+    onNavigateToGroupExpenses: () -> Unit,
     modifier: Modifier = Modifier
 ) {
     Column(modifier = modifier.fillMaxSize()) {
@@ -42,6 +43,13 @@ fun SettingsScreen(
             modifier = Modifier
                 .fillMaxWidth()
                 .clickable(onClick = onNavigateToMonthlyReport)
+        )
+        ListItem(
+            headlineContent = { Text("Group expenses") },
+            supportingContent = { Text("Split shared expenses with friends and track who owes whom") },
+            modifier = Modifier
+                .fillMaxWidth()
+                .clickable(onClick = onNavigateToGroupExpenses)
         )
     }
 }

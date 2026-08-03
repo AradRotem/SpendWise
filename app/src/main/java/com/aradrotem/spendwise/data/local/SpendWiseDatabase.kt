@@ -11,9 +11,13 @@ import androidx.room.RoomDatabase
         CategoryEntity::class,
         BudgetEntity::class,
         RecurringPaymentPlanEntity::class,
-        RecurringOccurrenceExceptionEntity::class
+        RecurringOccurrenceExceptionEntity::class,
+        ExpenseGroupEntity::class,
+        GroupMemberEntity::class,
+        GroupExpenseEntity::class,
+        GroupExpenseShareEntity::class
     ],
-    version = 6,
+    version = 7,
     exportSchema = false
 )
 abstract class SpendWiseDatabase : RoomDatabase() {
@@ -23,6 +27,9 @@ abstract class SpendWiseDatabase : RoomDatabase() {
     abstract fun budgetDao(): BudgetDao
     abstract fun recurringPaymentPlanDao(): RecurringPaymentPlanDao
     abstract fun recurringOccurrenceExceptionDao(): RecurringOccurrenceExceptionDao
+    abstract fun expenseGroupDao(): ExpenseGroupDao
+    abstract fun groupMemberDao(): GroupMemberDao
+    abstract fun groupExpenseDao(): GroupExpenseDao
 
     companion object {
         private const val DATABASE_NAME = "spendwise.db"
@@ -37,7 +44,7 @@ abstract class SpendWiseDatabase : RoomDatabase() {
                     SpendWiseDatabase::class.java,
                     DATABASE_NAME
                 )
-                    .addMigrations(MIGRATION_1_2, MIGRATION_2_3, MIGRATION_3_4, MIGRATION_4_5, MIGRATION_5_6)
+                    .addMigrations(MIGRATION_1_2, MIGRATION_2_3, MIGRATION_3_4, MIGRATION_4_5, MIGRATION_5_6, MIGRATION_6_7)
                     .build()
                     .also { instance = it }
             }

@@ -23,4 +23,22 @@ sealed class Screen(val route: String) {
             return if (occurrenceTransactionId != null) "$base?occurrenceTransactionId=$occurrenceTransactionId" else base
         }
     }
+
+    data object GroupExpenses : Screen("group_expenses")
+    data object AddGroup : Screen("add_group")
+    data object EditGroup : Screen("edit_group/{groupId}") {
+        fun createRoute(groupId: Long) = "edit_group/$groupId"
+    }
+    data object GroupDetails : Screen("group_details/{groupId}") {
+        fun createRoute(groupId: Long) = "group_details/$groupId"
+    }
+    data object GroupSettlement : Screen("group_settlement/{groupId}") {
+        fun createRoute(groupId: Long) = "group_settlement/$groupId"
+    }
+    data object AddGroupExpense : Screen("add_group_expense/{groupId}") {
+        fun createRoute(groupId: Long) = "add_group_expense/$groupId"
+    }
+    data object EditGroupExpense : Screen("edit_group_expense/{groupId}/{expenseId}") {
+        fun createRoute(groupId: Long, expenseId: Long) = "edit_group_expense/$groupId/$expenseId"
+    }
 }

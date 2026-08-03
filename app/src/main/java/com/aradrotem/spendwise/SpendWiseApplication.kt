@@ -4,6 +4,7 @@ import android.app.Application
 import com.aradrotem.spendwise.data.local.SpendWiseDatabase
 import com.aradrotem.spendwise.data.repository.BudgetRepository
 import com.aradrotem.spendwise.data.repository.CategoryRepository
+import com.aradrotem.spendwise.data.repository.GroupExpenseRepository
 import com.aradrotem.spendwise.data.repository.RecurringOccurrenceExceptionRepository
 import com.aradrotem.spendwise.data.repository.RecurringPaymentRepository
 import com.aradrotem.spendwise.data.repository.TransactionRepository
@@ -46,6 +47,10 @@ class SpendWiseApplication : Application() {
 
     val recurringOccurrenceManager: RecurringOccurrenceManager by lazy {
         RecurringOccurrenceManager(transactionRepository, recurringPaymentRepository, recurringOccurrenceExceptionRepository)
+    }
+
+    val groupExpenseRepository: GroupExpenseRepository by lazy {
+        GroupExpenseRepository(database.expenseGroupDao(), database.groupMemberDao(), database.groupExpenseDao())
     }
 
     override fun onCreate() {

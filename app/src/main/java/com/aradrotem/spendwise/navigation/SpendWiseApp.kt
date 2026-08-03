@@ -20,6 +20,11 @@ import com.aradrotem.spendwise.ui.screens.AddRecurringPlanScreen
 import com.aradrotem.spendwise.ui.screens.AddTransactionScreen
 import com.aradrotem.spendwise.ui.screens.BudgetsScreen
 import com.aradrotem.spendwise.ui.screens.CategoriesScreen
+import com.aradrotem.spendwise.ui.screens.GroupDetailsScreen
+import com.aradrotem.spendwise.ui.screens.GroupExpenseFormScreen
+import com.aradrotem.spendwise.ui.screens.GroupExpensesListScreen
+import com.aradrotem.spendwise.ui.screens.GroupFormScreen
+import com.aradrotem.spendwise.ui.screens.GroupSettlementScreen
 import com.aradrotem.spendwise.ui.screens.HomeScreen
 import com.aradrotem.spendwise.ui.screens.MonthlyReportScreen
 import com.aradrotem.spendwise.ui.screens.RecurringPaymentsScreen
@@ -35,7 +40,14 @@ fun SpendWiseApp() {
         currentRoute != Screen.Categories.route &&
         currentRoute != Screen.AddRecurringPayment.route &&
         currentRoute != Screen.EditRecurringPayment.route &&
-        currentRoute != Screen.MonthlyReport.route
+        currentRoute != Screen.MonthlyReport.route &&
+        currentRoute != Screen.GroupExpenses.route &&
+        currentRoute != Screen.AddGroup.route &&
+        currentRoute != Screen.EditGroup.route &&
+        currentRoute != Screen.GroupDetails.route &&
+        currentRoute != Screen.GroupSettlement.route &&
+        currentRoute != Screen.AddGroupExpense.route &&
+        currentRoute != Screen.EditGroupExpense.route
     // The Budgets and Recurring Payments screens each have their own "Add" action, so the global
     // "Add transaction" FAB is hidden there to avoid two competing add actions.
     val showFab = showBottomBar && currentRoute != Screen.Budgets.route && currentRoute != Screen.RecurringPayments.route
@@ -100,7 +112,8 @@ fun SpendWiseApp() {
                 SettingsScreen(
                     onNavigateToCategories = { navController.navigate(Screen.Categories.route) },
                     onNavigateToRecurringPayments = { navController.navigate(Screen.RecurringPayments.route) },
-                    onNavigateToMonthlyReport = { navController.navigate(Screen.MonthlyReport.route) }
+                    onNavigateToMonthlyReport = { navController.navigate(Screen.MonthlyReport.route) },
+                    onNavigateToGroupExpenses = { navController.navigate(Screen.GroupExpenses.route) }
                 )
             }
             composable(Screen.Categories.route) {
@@ -155,6 +168,83 @@ fun SpendWiseApp() {
                 val transactionId = backStackEntry.arguments?.getLong("transactionId")
                 AddTransactionScreen(
                     transactionId = transactionId,
+                    onSaveSuccess = { navController.popBackStack() },
+                    onBack = { navController.popBackStack() }
+                )
+            }
+            composable(Screen.GroupExpenses.route) {
+                GroupExpensesListScreen(
+                    onAddGroup = { navController.navigate(Screen.AddGroup.route) },
+                    onEditGroup = { groupId -> navController.navigate(Screen.EditGroup.createRoute(groupId)) },
+                    onOpenGroup = { groupId -> navController.navigate(Screen.GroupDetails.createRoute(groupId)) },
+                    onBack = { navController.popBackStack() }
+                )
+            }
+            composable(Screen.AddGroup.route) {
+                GroupFormScreen(
+                    groupId = null,
+                    onSaveSuccess = { navController.popBackStack() },
+                    onBack = { navController.popBackStack() }
+                )
+            }
+            composable(
+                route = Screen.EditGroup.route,
+                arguments = listOf(navArgument("groupId") { type = NavType.LongType })
+            ) { backStackEntry ->
+                val groupId = backStackEntry.arguments?.getLong("groupId") ?: return@composable
+                GroupFormScreen(
+                    groupId = groupId,
+                    onSaveSuccess = { navController.popBackStack() },
+                    onBack = { navController.popBackStack() }
+                )
+            }
+            composable(
+                route = Screen.GroupDetails.route,
+                arguments = listOf(navArgument("groupId") { type = NavType.LongType })
+            ) { backStackEntry ->
+                val groupId = backStackEntry.arguments?.getLong("groupId") ?: return@composable
+                GroupDetailsScreen(
+                    groupId = groupId,
+                    onAddExpense = { navController.navigate(Screen.AddGroupExpense.createRoute(groupId)) },
+                    onEditExpense = { expenseId -> navController.navigate(Screen.EditGroupExpense.createRoute(groupId, expenseId)) },
+                    onViewSettlement = { navController.navigate(Screen.GroupSettlement.createRoute(groupId)) },
+                    onBack = { navController.popBackStack() }
+                )
+            }
+            composable(
+                route = Screen.GroupSettlement.route,
+                arguments = listOf(navArgument("groupId") { type = NavType.LongType })
+            ) { backStackEntry ->
+                val groupId = backStackEntry.arguments?.getLong("groupId") ?: return@composable
+                GroupSettlementScreen(
+                    groupId = groupId,
+                    onBack = { navController.popBackStack() }
+                )
+            }
+            composable(
+                route = Screen.AddGroupExpense.route,
+                arguments = listOf(navArgument("groupId") { type = NavType.LongType })
+            ) { backStackEntry ->
+                val groupId = backStackEntry.arguments?.getLong("groupId") ?: return@composable
+                GroupExpenseFormScreen(
+                    groupId = groupId,
+                    expenseId = null,
+                    onSaveSuccess = { navController.popBackStack() },
+                    onBack = { navController.popBackStack() }
+                )
+            }
+            composable(
+                route = Screen.EditGroupExpense.route,
+                arguments = listOf(
+                    navArgument("groupId") { type = NavType.LongType },
+                    navArgument("expenseId") { type = NavType.LongType }
+                )
+            ) { backStackEntry ->
+                val groupId = backStackEntry.arguments?.getLong("groupId") ?: return@composable
+                val expenseId = backStackEntry.arguments?.getLong("expenseId") ?: return@composable
+                GroupExpenseFormScreen(
+                    groupId = groupId,
+                    expenseId = expenseId,
                     onSaveSuccess = { navController.popBackStack() },
                     onBack = { navController.popBackStack() }
                 )

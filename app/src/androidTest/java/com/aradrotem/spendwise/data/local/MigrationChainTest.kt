@@ -27,7 +27,7 @@ class MigrationChainTest {
     }
 
     @Test
-    fun migrate3To6_fullChain_appliesAllMigrationsAndValidatesFinalSchema() = runBlocking {
+    fun migrate3To7_fullChain_appliesAllMigrationsAndValidatesFinalSchema() = runBlocking {
         val context = InstrumentationRegistry.getInstrumentation().targetContext
         context.deleteDatabase(dbName)
 
@@ -42,13 +42,13 @@ class MigrationChainTest {
         )
         legacyDb.close()
 
-        // Applies MIGRATION_3_4, MIGRATION_4_5 and MIGRATION_5_6 in one open. Room validates the
-        // resulting schema against the real, current TransactionEntity/RecurringPaymentPlanEntity/
-        // RecurringOccurrenceExceptionEntity as soon as it's queried below - if the three
+        // Applies MIGRATION_3_4 through MIGRATION_6_7 in one open. Room validates the resulting
+        // schema against the real, current entities as soon as it's queried below - if the
         // migrations together don't produce exactly what the entities expect (including
-        // sourceTitle and isOccurrenceModified), this fails here.
+        // sourceTitle, isOccurrenceModified, and the new Step 14 group-expense tables), this fails
+        // here.
         val migratedDb = Room.databaseBuilder(context, SpendWiseDatabase::class.java, dbName)
-            .addMigrations(MIGRATION_3_4, MIGRATION_4_5, MIGRATION_5_6)
+            .addMigrations(MIGRATION_3_4, MIGRATION_4_5, MIGRATION_5_6, MIGRATION_6_7)
             .allowMainThreadQueries()
             .build()
 
@@ -93,6 +93,18 @@ class MigrationChainTest {
         )
         assertEquals(-1L, duplicateId)
         assertEquals(1, exceptionDao.getForPlan(planId).size)
+
+        // The version-7 group-expense tables are also usable through the full chain.
+        val groupId = migratedDb.expenseGroupDao().insert(ExpenseGroupEntity(name = "Trip"))
+        val memberId = migratedDb.groupMemberDao().insert(GroupMemberEntity(groupId = groupId, name = "Ann"))
+        val expenseId = migratedDb.groupExpenseDao().insertExpenseWithShares(
+            GroupExpenseEntity(
+                groupId = groupId, title = "Dinner", amountCents = 1_000L, dateEpochDay = 0L,
+                paidByMemberId = memberId, splitMethod = GroupSplitMethod.EQUAL
+            ),
+            listOf(GroupExpenseShareEntity(expenseId = 0, memberId = memberId, shareAmountCents = 1_000L))
+        )
+        assertEquals(1, migratedDb.groupExpenseDao().getSharesForExpense(expenseId).size)
 
         migratedDb.close()
     }
