@@ -16,7 +16,7 @@ import androidx.compose.ui.unit.dp
 fun SettingsScreen(
     onNavigateToCategories: () -> Unit,
     onNavigateToRecurringPayments: () -> Unit,
-    onNavigateToMonthlyReport: () -> Unit,
+    onNavigateToReportsAnalytics: () -> Unit,
     onNavigateToGroupExpenses: () -> Unit,
     modifier: Modifier = Modifier
 ) {
@@ -38,11 +38,11 @@ fun SettingsScreen(
                 .clickable(onClick = onNavigateToRecurringPayments)
         )
         ListItem(
-            headlineContent = { Text("Monthly report") },
-            supportingContent = { Text("View and share income, expenses, and budgets for any month") },
+            headlineContent = { Text("Reports & analytics") },
+            supportingContent = { Text("View reports, charts, trends, budgets, and spending insights") },
             modifier = Modifier
                 .fillMaxWidth()
-                .clickable(onClick = onNavigateToMonthlyReport)
+                .clickable(onClick = onNavigateToReportsAnalytics)
         )
         ListItem(
             headlineContent = { Text("Group expenses") },

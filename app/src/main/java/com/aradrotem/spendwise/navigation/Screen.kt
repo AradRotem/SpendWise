@@ -10,7 +10,6 @@ sealed class Screen(val route: String) {
         fun createRoute(transactionId: Long) = "edit_transaction/$transactionId"
     }
     data object Categories : Screen("categories")
-    data object MonthlyReport : Screen("monthly_report")
     data object RecurringPayments : Screen("recurring_payments")
     data object AddRecurringPayment : Screen("add_recurring_payment")
     data object EditRecurringPayment : Screen("edit_recurring_payment/{planId}?occurrenceTransactionId={occurrenceTransactionId}") {
@@ -23,6 +22,12 @@ sealed class Screen(val route: String) {
             return if (occurrenceTransactionId != null) "$base?occurrenceTransactionId=$occurrenceTransactionId" else base
         }
     }
+
+    // Single user-facing route for the merged Monthly Report + Visual Analytics feature (Step 15
+    // final refinement). "visual_analytics" was the pre-merge route name; kept as the route string
+    // rather than renamed, since it's an internal identifier with no user-visible effect - only
+    // the Settings entry/screen title changed to "Reports & analytics".
+    data object ReportsAnalytics : Screen("visual_analytics")
 
     data object GroupExpenses : Screen("group_expenses")
     data object AddGroup : Screen("add_group")

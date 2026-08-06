@@ -20,3 +20,14 @@ fun currentMonthRange(zoneId: ZoneId = ZoneId.systemDefault()): MonthRange =
 
 fun previousMonthRange(zoneId: ZoneId = ZoneId.systemDefault()): MonthRange =
     monthRange(YearMonth.now(zoneId).minusMonths(1), zoneId)
+
+// Spans the earliest start to the latest end-exclusive across several month ranges - used by
+// Visual Analytics to fetch a whole multi-month period with a single observeInRange query instead
+// of one subscription per month.
+fun combinedRange(monthRanges: List<MonthRange>): MonthRange {
+    require(monthRanges.isNotEmpty()) { "monthRanges must not be empty" }
+    return MonthRange(
+        startMillis = monthRanges.minOf { it.startMillis },
+        endExclusiveMillis = monthRanges.maxOf { it.endExclusiveMillis }
+    )
+}

@@ -26,8 +26,8 @@ import com.aradrotem.spendwise.ui.screens.GroupExpensesListScreen
 import com.aradrotem.spendwise.ui.screens.GroupFormScreen
 import com.aradrotem.spendwise.ui.screens.GroupSettlementScreen
 import com.aradrotem.spendwise.ui.screens.HomeScreen
-import com.aradrotem.spendwise.ui.screens.MonthlyReportScreen
 import com.aradrotem.spendwise.ui.screens.RecurringPaymentsScreen
+import com.aradrotem.spendwise.ui.screens.ReportsAnalyticsScreen
 import com.aradrotem.spendwise.ui.screens.SettingsScreen
 import com.aradrotem.spendwise.ui.screens.TransactionsScreen
 
@@ -40,7 +40,7 @@ fun SpendWiseApp() {
         currentRoute != Screen.Categories.route &&
         currentRoute != Screen.AddRecurringPayment.route &&
         currentRoute != Screen.EditRecurringPayment.route &&
-        currentRoute != Screen.MonthlyReport.route &&
+        currentRoute != Screen.ReportsAnalytics.route &&
         currentRoute != Screen.GroupExpenses.route &&
         currentRoute != Screen.AddGroup.route &&
         currentRoute != Screen.EditGroup.route &&
@@ -112,15 +112,15 @@ fun SpendWiseApp() {
                 SettingsScreen(
                     onNavigateToCategories = { navController.navigate(Screen.Categories.route) },
                     onNavigateToRecurringPayments = { navController.navigate(Screen.RecurringPayments.route) },
-                    onNavigateToMonthlyReport = { navController.navigate(Screen.MonthlyReport.route) },
+                    onNavigateToReportsAnalytics = { navController.navigate(Screen.ReportsAnalytics.route) },
                     onNavigateToGroupExpenses = { navController.navigate(Screen.GroupExpenses.route) }
                 )
             }
             composable(Screen.Categories.route) {
                 CategoriesScreen(onBack = { navController.popBackStack() })
             }
-            composable(Screen.MonthlyReport.route) {
-                MonthlyReportScreen(onBack = { navController.popBackStack() })
+            composable(Screen.ReportsAnalytics.route) {
+                ReportsAnalyticsScreen(onBack = { navController.popBackStack() })
             }
             composable(Screen.RecurringPayments.route) {
                 RecurringPaymentsScreen(
