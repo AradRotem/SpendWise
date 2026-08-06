@@ -25,21 +25,25 @@ import androidx.compose.material3.Text
 import androidx.compose.material3.TextButton
 import androidx.compose.material3.TopAppBar
 import androidx.compose.runtime.Composable
-import androidx.compose.runtime.collectAsState
 import androidx.compose.runtime.getValue
+import androidx.lifecycle.compose.collectAsStateWithLifecycle
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
+import androidx.compose.ui.res.stringResource
 import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.unit.dp
 import androidx.lifecycle.viewmodel.compose.viewModel
+import com.aradrotem.spendwise.R
 import com.aradrotem.spendwise.SpendWiseApplication
 import com.aradrotem.spendwise.data.local.GroupExpenseEntity
 import com.aradrotem.spendwise.data.local.GroupSplitMethod
 import com.aradrotem.spendwise.ui.format.formatAmountInCents
+import com.aradrotem.spendwise.ui.format.formatDate
 import java.time.LocalDate
+import java.time.ZoneId
 
 @OptIn(ExperimentalMaterial3Api::class)
 @Composable
@@ -57,7 +61,7 @@ fun GroupDetailsScreen(
         )
     )
 ) {
-    val uiState by viewModel.uiState.collectAsState()
+    val uiState by viewModel.uiState.collectAsStateWithLifecycle()
     var expensePendingDelete by remember { mutableStateOf<GroupExpenseEntity?>(null) }
 
     Scaffold(
@@ -133,10 +137,10 @@ fun GroupDetailsScreen(
                 TextButton(onClick = {
                     viewModel.onDeleteExpense(expense)
                     expensePendingDelete = null
-                }) { Text("Delete", color = MaterialTheme.colorScheme.error) }
+                }) { Text(stringResource(R.string.action_delete), color = MaterialTheme.colorScheme.error) }
             },
             dismissButton = {
-                TextButton(onClick = { expensePendingDelete = null }) { Text("Cancel") }
+                TextButton(onClick = { expensePendingDelete = null }) { Text(stringResource(R.string.action_cancel)) }
             }
         )
     }
@@ -189,9 +193,9 @@ internal fun GroupExpenseRow(
             Box {
                 TextButton(onClick = { menuExpanded = true }) { Text("⋮") }
                 DropdownMenu(expanded = menuExpanded, onDismissRequest = { menuExpanded = false }) {
-                    DropdownMenuItem(text = { Text("Edit") }, onClick = { menuExpanded = false; onEdit() })
-                    DropdownMenuItem(text = { Text("Delete") }, onClick = { menuExpanded = false; onRequestDelete() })
-                    DropdownMenuItem(text = { Text("Cancel") }, onClick = { menuExpanded = false })
+                    DropdownMenuItem(text = { Text(stringResource(R.string.action_edit)) }, onClick = { menuExpanded = false; onEdit() })
+                    DropdownMenuItem(text = { Text(stringResource(R.string.action_delete)) }, onClick = { menuExpanded = false; onRequestDelete() })
+                    DropdownMenuItem(text = { Text(stringResource(R.string.action_cancel)) }, onClick = { menuExpanded = false })
                 }
             }
         }
@@ -204,8 +208,8 @@ private fun splitMethodLabel(method: GroupSplitMethod): String = when (method) {
 }
 
 private fun formatEpochDay(epochDay: Long): String {
-    val date = LocalDate.ofEpochDay(epochDay)
-    return "%02d/%02d/%04d".format(date.dayOfMonth, date.monthValue, date.year)
+    val millis = LocalDate.ofEpochDay(epochDay).atStartOfDay(ZoneId.systemDefault()).toInstant().toEpochMilli()
+    return formatDate(millis)
 }
 
 // "X owes Y" / "Y is owed X" style line matching the spec's settlement wording, but per-member.

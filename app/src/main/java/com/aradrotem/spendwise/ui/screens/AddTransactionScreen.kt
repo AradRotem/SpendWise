@@ -23,8 +23,8 @@ import androidx.compose.material3.TextButton
 import androidx.compose.material3.TopAppBar
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.LaunchedEffect
-import androidx.compose.runtime.collectAsState
 import androidx.compose.runtime.getValue
+import androidx.lifecycle.compose.collectAsStateWithLifecycle
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.platform.LocalContext
@@ -52,8 +52,8 @@ fun AddTransactionScreen(
         )
     )
 ) {
-    val uiState by viewModel.uiState.collectAsState()
-    val availableCategories by viewModel.availableCategories.collectAsState()
+    val uiState by viewModel.uiState.collectAsStateWithLifecycle()
+    val availableCategories by viewModel.availableCategories.collectAsStateWithLifecycle()
     val isEditMode = transactionId != null
 
     LaunchedEffect(uiState.isSaved) {

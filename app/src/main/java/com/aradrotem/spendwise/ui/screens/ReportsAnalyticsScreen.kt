@@ -34,14 +34,15 @@ import androidx.compose.material3.Text
 import androidx.compose.material3.TextButton
 import androidx.compose.material3.TopAppBar
 import androidx.compose.runtime.Composable
-import androidx.compose.runtime.collectAsState
 import androidx.compose.runtime.getValue
+import androidx.lifecycle.compose.collectAsStateWithLifecycle
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.graphics.Color
+import androidx.compose.ui.res.stringResource
 import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.semantics.contentDescription
 import androidx.compose.ui.semantics.selected
@@ -49,6 +50,7 @@ import androidx.compose.ui.semantics.semantics
 import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
 import androidx.lifecycle.viewmodel.compose.viewModel
+import com.aradrotem.spendwise.R
 import com.aradrotem.spendwise.SpendWiseApplication
 import com.aradrotem.spendwise.domain.AnalyticsTimeRange
 import com.aradrotem.spendwise.domain.CategoryExpenseDetails
@@ -63,6 +65,7 @@ import com.aradrotem.spendwise.ui.components.SingleSeriesBarChart
 import com.aradrotem.spendwise.ui.format.formatAmountInCents
 import com.aradrotem.spendwise.ui.format.formatDate
 import com.aradrotem.spendwise.ui.format.formatMonthYear
+import com.aradrotem.spendwise.ui.format.signedAbsolute
 import com.aradrotem.spendwise.util.colorForCategory
 import com.aradrotem.spendwise.util.formatCategoryDisplayName
 import kotlin.math.roundToInt
@@ -80,7 +83,7 @@ fun ReportsAnalyticsScreen(
         )
     )
 ) {
-    val uiState by viewModel.uiState.collectAsState()
+    val uiState by viewModel.uiState.collectAsStateWithLifecycle()
     val context = LocalContext.current
 
     Scaffold(
@@ -100,7 +103,7 @@ fun ReportsAnalyticsScreen(
                                 putExtra(Intent.EXTRA_TEXT, shareText)
                             }
                             context.startActivity(Intent.createChooser(sendIntent, "Share report"))
-                        }) { Text("Share") }
+                        }) { Text(stringResource(R.string.action_share)) }
                     }
                 }
             )
@@ -214,7 +217,7 @@ private fun MonthlyModeSections(monthly: MonthlyReportUiState, insights: List<Fi
     MonthlySummarySection(monthly)
     SpendingByCategorySection(
         points = CategoryDistributionFromBreakdown(monthly),
-        emptyMessage = "No expenses recorded this month.",
+        emptyMessage = stringResource(R.string.empty_state_no_expenses_this_month),
         selectedCategory = uiState.selectedDrillDownCategory,
         details = uiState.drillDownDetails,
         onSelectCategory = viewModel::onCategorySelected
@@ -244,7 +247,7 @@ private fun CategoryDistributionFromBreakdown(monthly: MonthlyReportUiState): Li
 @Composable
 private fun MonthlySummarySection(monthly: MonthlyReportUiState) {
     Column(verticalArrangement = Arrangement.spacedBy(12.dp)) {
-        Text("Summary", style = MaterialTheme.typography.titleMedium)
+        Text(stringResource(R.string.label_summary), style = MaterialTheme.typography.titleMedium)
         Row(horizontalArrangement = Arrangement.spacedBy(12.dp), modifier = Modifier.fillMaxWidth()) {
             SummaryValueCard("Income", formatAmountInCents(monthly.incomeCents), MaterialTheme.colorScheme.primary, Modifier.weight(1f))
             SummaryValueCard("Expenses", formatAmountInCents(monthly.expenseCents), MaterialTheme.colorScheme.error, Modifier.weight(1f))
@@ -345,7 +348,7 @@ private fun PeriodModeSections(period: VisualAnalyticsUiState, uiState: ReportsA
 @Composable
 private fun PeriodSummarySection(period: VisualAnalyticsUiState) {
     Column(verticalArrangement = Arrangement.spacedBy(12.dp)) {
-        Text("Summary", style = MaterialTheme.typography.titleMedium)
+        Text(stringResource(R.string.label_summary), style = MaterialTheme.typography.titleMedium)
         Row(horizontalArrangement = Arrangement.spacedBy(12.dp), modifier = Modifier.fillMaxWidth()) {
             SummaryValueCard("Income", formatAmountInCents(period.totalIncomeCents), MaterialTheme.colorScheme.primary, Modifier.weight(1f))
             SummaryValueCard("Expenses", formatAmountInCents(period.totalExpenseCents), MaterialTheme.colorScheme.error, Modifier.weight(1f))

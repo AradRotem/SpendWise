@@ -22,7 +22,9 @@ import com.aradrotem.spendwise.domain.FinancialInsightGenerator
 import com.aradrotem.spendwise.domain.MonthlyIncomeExpensePoint
 import com.aradrotem.spendwise.domain.MonthlySpendingTrendCalculator
 import com.aradrotem.spendwise.domain.monthsForAnalyticsRange
+import com.aradrotem.spendwise.ui.format.formatAmountInCents
 import com.aradrotem.spendwise.ui.format.formatMonthYear
+import com.aradrotem.spendwise.ui.format.formatPercent
 import com.aradrotem.spendwise.ui.format.formatPeriodLabel
 import com.aradrotem.spendwise.util.combinedRange
 import com.aradrotem.spendwise.util.formatCategoryDisplayName
@@ -208,7 +210,9 @@ internal fun buildMonthlyModeUiState(
         monthlyIncomeExpensePoints = twoPointHistory,
         budgetActualPoints = budgetActuals,
         categoryTrendPoints = emptyList(),
-        selectedCategoryName = null
+        selectedCategoryName = null,
+        formatAmountCents = ::formatAmountInCents,
+        formatPercent = ::formatPercent
     )
 
     val resolvedDrillDown = resolveDrillDown(

@@ -1,3 +1,15 @@
 <resources>
     <string name="app_name">SpendWise</string>
+
+    <string name="action_cancel">Cancel</string>
+    <string name="action_delete">Delete</string>
+    <string name="action_edit">Edit</string>
+    <string name="action_save">Save</string>
+    <string name="action_ok">OK</string>
+    <string name="action_add">Add</string>
+    <string name="action_share">Share</string>
+    <string name="label_summary">Summary</string>
+    <string name="empty_state_no_transactions">No transactions yet</string>
+    <string name="empty_state_no_expenses_this_month">No expenses recorded this month.</string>
+    <string name="dialog_action_cannot_be_undone">This action cannot be undone.</string>
 </resources>

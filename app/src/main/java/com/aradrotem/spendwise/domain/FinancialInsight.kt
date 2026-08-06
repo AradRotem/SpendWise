@@ -1,9 +1,6 @@
 package com.aradrotem.spendwise.domain
 
-import com.aradrotem.spendwise.ui.format.formatAmountInCents
 import com.aradrotem.spendwise.util.formatCategoryDisplayName
-import kotlin.math.abs
-import kotlin.math.roundToInt
 
 data class FinancialInsight(val text: String, val priority: Int)
 
@@ -33,14 +30,16 @@ object FinancialInsightGenerator {
         monthlyIncomeExpensePoints: List<MonthlyIncomeExpensePoint>,
         budgetActualPoints: List<BudgetActualPoint>,
         categoryTrendPoints: List<CategoryTrendPoint>,
-        selectedCategoryName: String?
+        selectedCategoryName: String?,
+        formatAmountCents: (Long) -> String,
+        formatPercent: (Float) -> String
     ): List<FinancialInsight> {
         val insights = mutableListOf<FinancialInsight>()
 
         budgetActualPoints.filter { it.status == BudgetStatus.OVER_BUDGET }.forEach { budget ->
             val overCents = budget.actualCents - budget.budgetCents
             insights += FinancialInsight(
-                "You exceeded the ${formatCategoryDisplayName(budget.categoryName)} budget by ${formatAmountInCents(overCents)}.",
+                "You exceeded the ${formatCategoryDisplayName(budget.categoryName)} budget by ${formatAmountCents(overCents)}.",
                 PRIORITY_BUDGET_EXCEEDED
             )
         }
@@ -106,12 +105,4 @@ object FinancialInsightGenerator {
 
         return insights.sortedBy { it.priority }.take(MAX_INSIGHTS)
     }
-}
-
-// One decimal place, matching the spec's own examples ("12.5%"), without ever showing a
-// misleading sign - callers already choose "increased"/"decreased" wording, so this only formats
-// a non-negative magnitude.
-private fun formatPercent(percent: Float): String {
-    val hundredths = (abs(percent) * 10).roundToInt()
-    return "${hundredths / 10}.${hundredths % 10}"
 }

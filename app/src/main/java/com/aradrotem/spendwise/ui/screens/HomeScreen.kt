@@ -17,20 +17,23 @@ import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.Text
 import androidx.compose.material3.TextButton
 import androidx.compose.runtime.Composable
-import androidx.compose.runtime.collectAsState
 import androidx.compose.runtime.getValue
+import androidx.lifecycle.compose.collectAsStateWithLifecycle
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.graphics.Color
+import androidx.compose.ui.res.stringResource
 import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.unit.dp
 import androidx.lifecycle.viewmodel.compose.viewModel
+import com.aradrotem.spendwise.R
 import com.aradrotem.spendwise.SpendWiseApplication
 import com.aradrotem.spendwise.data.local.TransactionEntity
 import com.aradrotem.spendwise.ui.components.TransactionRow
 import com.aradrotem.spendwise.ui.format.formatAmountInCents
+import com.aradrotem.spendwise.ui.format.signedAbsolute
+import com.aradrotem.spendwise.ui.format.signedDelta
 import com.aradrotem.spendwise.util.formatCategoryDisplayName
-import kotlin.math.abs
 import kotlin.math.roundToInt
 
 @Composable
@@ -45,7 +48,7 @@ fun HomeScreen(
         )
     )
 ) {
-    val uiState by viewModel.uiState.collectAsState()
+    val uiState by viewModel.uiState.collectAsStateWithLifecycle()
 
     if (uiState.isLoading) {
         Box(modifier = modifier.fillMaxSize(), contentAlignment = Alignment.Center) {
@@ -110,7 +113,6 @@ private fun BalanceCard(balanceCents: Long, changeCents: Long, modifier: Modifie
         balanceCents < 0L -> MaterialTheme.colorScheme.error
         else -> MaterialTheme.colorScheme.onSurfaceVariant
     }
-    val sign = if (balanceCents < 0L) "-" else ""
     Card(modifier = modifier.fillMaxWidth()) {
         Column(modifier = Modifier.padding(16.dp)) {
             Text(
@@ -118,7 +120,7 @@ private fun BalanceCard(balanceCents: Long, changeCents: Long, modifier: Modifie
                 style = MaterialTheme.typography.labelLarge,
                 color = MaterialTheme.colorScheme.onSurfaceVariant
             )
-            Text("$sign${formatAmountInCents(abs(balanceCents))}", style = MaterialTheme.typography.headlineMedium, color = color)
+            Text(signedAbsolute(balanceCents), style = MaterialTheme.typography.headlineMedium, color = color)
             MonthOverMonthText(changeCents)
         }
     }
@@ -127,13 +129,8 @@ private fun BalanceCard(balanceCents: Long, changeCents: Long, modifier: Modifie
 // Minimal month-over-month indicator shared by the income/expense/balance cards.
 @Composable
 private fun MonthOverMonthText(changeCents: Long, modifier: Modifier = Modifier) {
-    val sign = when {
-        changeCents > 0L -> "+"
-        changeCents < 0L -> "-"
-        else -> ""
-    }
     Text(
-        "$sign${formatAmountInCents(abs(changeCents))} vs last month",
+        "${signedDelta(changeCents)} vs last month",
         style = MaterialTheme.typography.bodySmall,
         color = MaterialTheme.colorScheme.onSurfaceVariant,
         modifier = modifier
@@ -241,7 +238,7 @@ private fun RecentTransactionsSection(
         Card(modifier = Modifier.fillMaxWidth()) {
             if (transactions.isEmpty()) {
                 Text(
-                    "No transactions yet",
+                    stringResource(R.string.empty_state_no_transactions),
                     modifier = Modifier.padding(16.dp),
                     color = MaterialTheme.colorScheme.onSurfaceVariant
                 )

@@ -25,17 +25,19 @@ import androidx.compose.material3.Text
 import androidx.compose.material3.TextButton
 import androidx.compose.material3.TopAppBar
 import androidx.compose.runtime.Composable
-import androidx.compose.runtime.collectAsState
 import androidx.compose.runtime.getValue
+import androidx.lifecycle.compose.collectAsStateWithLifecycle
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
+import androidx.compose.ui.res.stringResource
 import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.unit.dp
 import androidx.lifecycle.viewmodel.compose.viewModel
+import com.aradrotem.spendwise.R
 import com.aradrotem.spendwise.SpendWiseApplication
 import com.aradrotem.spendwise.data.local.ExpenseGroupEntity
 import com.aradrotem.spendwise.ui.format.formatAmountInCents
@@ -54,7 +56,7 @@ fun GroupExpensesListScreen(
         )
     )
 ) {
-    val uiState by viewModel.uiState.collectAsState()
+    val uiState by viewModel.uiState.collectAsStateWithLifecycle()
     var groupPendingDelete by remember { mutableStateOf<ExpenseGroupEntity?>(null) }
 
     Scaffold(
@@ -166,7 +168,7 @@ internal fun GroupSummaryCard(
                     DropdownMenu(expanded = menuExpanded, onDismissRequest = { menuExpanded = false }) {
                         DropdownMenuItem(text = { Text("Edit group") }, onClick = { menuExpanded = false; onEdit() })
                         DropdownMenuItem(text = { Text("Delete group") }, onClick = { menuExpanded = false; onRequestDelete() })
-                        DropdownMenuItem(text = { Text("Cancel") }, onClick = { menuExpanded = false })
+                        DropdownMenuItem(text = { Text(stringResource(R.string.action_cancel)) }, onClick = { menuExpanded = false })
                     }
                 }
             }
@@ -187,10 +189,10 @@ private fun DeleteGroupDialog(groupName: String, onConfirm: () -> Unit, onDismis
         title = { Text("Delete \"$groupName\"?") },
         text = { Text("All members and shared expenses in this group will also be deleted. This action cannot be undone.") },
         confirmButton = {
-            TextButton(onClick = onConfirm) { Text("Delete", color = MaterialTheme.colorScheme.error) }
+            TextButton(onClick = onConfirm) { Text(stringResource(R.string.action_delete), color = MaterialTheme.colorScheme.error) }
         },
         dismissButton = {
-            TextButton(onClick = onDismiss) { Text("Cancel") }
+            TextButton(onClick = onDismiss) { Text(stringResource(R.string.action_cancel)) }
         }
     )
 }

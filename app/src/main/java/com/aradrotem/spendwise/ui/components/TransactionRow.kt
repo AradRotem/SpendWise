@@ -12,7 +12,7 @@ import androidx.compose.ui.Modifier
 import androidx.compose.ui.unit.dp
 import com.aradrotem.spendwise.data.local.TransactionEntity
 import com.aradrotem.spendwise.data.local.TransactionType
-import com.aradrotem.spendwise.ui.format.formatAmountInCents
+import com.aradrotem.spendwise.ui.format.formatAmountWithSign
 import com.aradrotem.spendwise.ui.format.formatDate
 import com.aradrotem.spendwise.util.formatCategoryDisplayName
 
@@ -40,7 +40,7 @@ fun TransactionRow(transaction: TransactionEntity, modifier: Modifier = Modifier
         val amountColor = if (isExpense) MaterialTheme.colorScheme.error else MaterialTheme.colorScheme.primary
 
         Text(
-            text = "$sign${formatAmountInCents(transaction.amountInCents)}",
+            text = formatAmountWithSign(sign, transaction.amountInCents),
             color = amountColor,
             style = MaterialTheme.typography.bodyLarge
         )

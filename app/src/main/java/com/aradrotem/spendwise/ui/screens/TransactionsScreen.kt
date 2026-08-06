@@ -17,18 +17,20 @@ import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.Text
 import androidx.compose.material3.TextButton
 import androidx.compose.runtime.Composable
-import androidx.compose.runtime.collectAsState
 import androidx.compose.runtime.getValue
+import androidx.lifecycle.compose.collectAsStateWithLifecycle
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
 import androidx.compose.runtime.rememberCoroutineScope
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
+import androidx.compose.ui.res.stringResource
 import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.unit.dp
 import androidx.lifecycle.viewmodel.compose.viewModel
+import com.aradrotem.spendwise.R
 import com.aradrotem.spendwise.SpendWiseApplication
 import com.aradrotem.spendwise.data.local.TransactionEntity
 import com.aradrotem.spendwise.ui.components.TransactionRow
@@ -53,7 +55,7 @@ fun TransactionsScreen(
         )
     )
 ) {
-    val uiState by viewModel.uiState.collectAsState()
+    val uiState by viewModel.uiState.collectAsStateWithLifecycle()
     val coroutineScope = rememberCoroutineScope()
 
     var actionTransaction by remember { mutableStateOf<TransactionEntity?>(null) }
@@ -92,7 +94,7 @@ fun TransactionsScreen(
             }
             uiState.transactions.isEmpty() -> {
                 Text(
-                    text = "No transactions yet",
+                    text = stringResource(R.string.empty_state_no_transactions),
                     modifier = Modifier.align(Alignment.Center)
                 )
             }
@@ -255,13 +257,13 @@ private fun TransactionActionDialog(
                 verticalArrangement = Arrangement.spacedBy(4.dp)
             ) {
                 TextButton(onClick = onEdit, modifier = Modifier.fillMaxWidth()) {
-                    Text("Edit")
+                    Text(stringResource(R.string.action_edit))
                 }
                 TextButton(onClick = onDelete, modifier = Modifier.fillMaxWidth()) {
-                    Text("Delete", color = MaterialTheme.colorScheme.error)
+                    Text(stringResource(R.string.action_delete), color = MaterialTheme.colorScheme.error)
                 }
                 TextButton(onClick = onCancel, modifier = Modifier.fillMaxWidth()) {
-                    Text("Cancel")
+                    Text(stringResource(R.string.action_cancel))
                 }
             }
         },
@@ -277,15 +279,15 @@ private fun DeleteConfirmationDialog(
     AlertDialog(
         onDismissRequest = onDismiss,
         title = { Text("Delete transaction?") },
-        text = { Text("This action cannot be undone.") },
+        text = { Text(stringResource(R.string.dialog_action_cannot_be_undone)) },
         confirmButton = {
             TextButton(onClick = onConfirm) {
-                Text("Delete")
+                Text(stringResource(R.string.action_delete))
             }
         },
         dismissButton = {
             TextButton(onClick = onDismiss) {
-                Text("Cancel")
+                Text(stringResource(R.string.action_cancel))
             }
         }
     )
@@ -351,7 +353,7 @@ private fun InstallmentOccurrenceActionDialog(
                     Text(LABEL_ADVANCED_OCCURRENCE_ACTIONS)
                 }
                 TextButton(onClick = onCancel, modifier = Modifier.fillMaxWidth()) {
-                    Text("Cancel")
+                    Text(stringResource(R.string.action_cancel))
                 }
             }
         },
@@ -378,7 +380,7 @@ private fun InstallmentAdvancedActionDialog(
                     Text(LABEL_EDIT_RECORD_ONLY)
                 }
                 TextButton(onClick = onCancel, modifier = Modifier.fillMaxWidth()) {
-                    Text("Cancel")
+                    Text(stringResource(R.string.action_cancel))
                 }
             }
         },
@@ -399,7 +401,7 @@ private fun InstallmentEditWarningDialog(onConfirm: () -> Unit, onDismiss: () ->
         },
         dismissButton = {
             TextButton(onClick = onDismiss) {
-                Text("Cancel")
+                Text(stringResource(R.string.action_cancel))
             }
         }
     )
@@ -456,7 +458,7 @@ private fun RecurringOccurrenceActionDialog(
                     }
                 }
                 TextButton(onClick = onCancel, modifier = Modifier.fillMaxWidth()) {
-                    Text("Cancel")
+                    Text(stringResource(R.string.action_cancel))
                 }
             }
         },
@@ -482,7 +484,7 @@ private fun DeleteOccurrenceDialog(onConfirm: () -> Unit, onDismiss: () -> Unit)
         },
         dismissButton = {
             TextButton(onClick = onDismiss) {
-                Text("Cancel")
+                Text(stringResource(R.string.action_cancel))
             }
         }
     )
@@ -512,7 +514,7 @@ private fun DeleteOccurrenceAndFutureDialog(laterCount: Int, onConfirm: () -> Un
         },
         dismissButton = {
             TextButton(onClick = onDismiss) {
-                Text("Cancel")
+                Text(stringResource(R.string.action_cancel))
             }
         }
     )

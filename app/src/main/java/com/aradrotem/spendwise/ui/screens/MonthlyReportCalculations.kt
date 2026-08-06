@@ -6,6 +6,9 @@ import com.aradrotem.spendwise.data.local.TransactionEntity
 import com.aradrotem.spendwise.data.local.TransactionType
 import com.aradrotem.spendwise.ui.format.formatAmountInCents
 import com.aradrotem.spendwise.ui.format.formatMonthYear
+import com.aradrotem.spendwise.ui.format.formatPercent
+import com.aradrotem.spendwise.ui.format.signedAbsolute
+import com.aradrotem.spendwise.ui.format.signedDelta
 import com.aradrotem.spendwise.util.formatCategoryDisplayName
 import java.time.YearMonth
 import kotlin.math.abs
@@ -102,22 +105,6 @@ fun buildMonthlyReportShareText(state: MonthlyReportUiState): String {
     return lines.joinToString(separator = "\n")
 }
 
-// No sign for zero/positive (matches HomeScreen's BalanceCard), "-" only when negative.
-fun signedAbsolute(cents: Long): String {
-    val sign = if (cents < 0L) "-" else ""
-    return "$sign${formatAmountInCents(abs(cents))}"
-}
-
-// Explicit "+"/"-" for month-over-month deltas so a change is never ambiguous.
-fun signedDelta(cents: Long): String {
-    val sign = when {
-        cents > 0L -> "+"
-        cents < 0L -> "-"
-        else -> ""
-    }
-    return "$sign${formatAmountInCents(abs(cents))}"
-}
-
 // Clear, non-numeric-only wording for a month-over-month expense/income/balance change, replacing
 // a bare "-3187.66 vs last month" style line with an explicit increased/decreased sentence. Mirrors
 // the "no previous spending" wording already used by Visual Analytics' monthly trend.
@@ -130,12 +117,7 @@ fun monthOverMonthText(label: String, currentCents: Long, previousCents: Long): 
         else -> {
             val percent = (abs(change).toFloat() / abs(previousCents).toFloat()) * 100f
             val verb = if (change > 0L) "increased" else "decreased"
-            "$label $verb by ${formatAmountInCents(abs(change))} (${formatPercentOneDecimal(percent)}%) compared with last month"
+            "$label $verb by ${formatAmountInCents(abs(change))} (${formatPercent(percent)}%) compared with last month"
         }
     }
-}
-
-private fun formatPercentOneDecimal(percent: Float): String {
-    val tenths = Math.round(percent * 10)
-    return "${tenths / 10}.${tenths % 10}"
 }

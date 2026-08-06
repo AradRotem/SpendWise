@@ -1,5 +1,6 @@
 package com.aradrotem.spendwise.ui.components
 
+import androidx.compose.ui.res.stringResource
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.material3.DatePicker
 import androidx.compose.material3.DatePickerDialog
@@ -14,6 +15,7 @@ import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Modifier
+import com.aradrotem.spendwise.R
 import com.aradrotem.spendwise.ui.format.formatDate
 
 @OptIn(ExperimentalMaterial3Api::class)
@@ -40,12 +42,12 @@ fun DateField(
                     datePickerState.selectedDateMillis?.let(onDateSelected)
                     showPicker = false
                 }) {
-                    Text("OK")
+                    Text(stringResource(R.string.action_ok))
                 }
             },
             dismissButton = {
                 TextButton(onClick = { showPicker = false }) {
-                    Text("Cancel")
+                    Text(stringResource(R.string.action_cancel))
                 }
             }
         ) {

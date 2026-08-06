@@ -14,6 +14,8 @@ import com.aradrotem.spendwise.domain.MonthlyIncomeExpenseCalculator
 import com.aradrotem.spendwise.domain.MonthlySpendingTrendCalculator
 import com.aradrotem.spendwise.ui.format.formatAmountInCents
 import com.aradrotem.spendwise.ui.format.formatMonthYear
+import com.aradrotem.spendwise.ui.format.formatPercent
+import com.aradrotem.spendwise.ui.format.signedAbsolute
 import com.aradrotem.spendwise.util.formatCategoryDisplayName
 import com.aradrotem.spendwise.util.monthRange
 import java.time.YearMonth
@@ -75,7 +77,9 @@ fun buildVisualAnalyticsUiState(
         monthlyIncomeExpensePoints = monthlyIncomeExpense,
         budgetActualPoints = budgetActuals,
         categoryTrendPoints = categoryTrend,
-        selectedCategoryName = resolvedTrendCategory
+        selectedCategoryName = resolvedTrendCategory,
+        formatAmountCents = ::formatAmountInCents,
+        formatPercent = ::formatPercent
     )
 
     return VisualAnalyticsUiState(
