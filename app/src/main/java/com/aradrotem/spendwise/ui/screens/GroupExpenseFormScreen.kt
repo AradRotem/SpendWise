@@ -180,7 +180,7 @@ fun GroupExpenseFormScreen(
                     enabled = !uiState.isSaving && uiState.isCustomSplitBalanced,
                     modifier = Modifier.fillMaxWidth()
                 ) {
-                    Text(stringResource(R.string.action_save))
+                    Text(if (uiState.isEditMode) "Update" else stringResource(R.string.action_save))
                 }
             }
         }

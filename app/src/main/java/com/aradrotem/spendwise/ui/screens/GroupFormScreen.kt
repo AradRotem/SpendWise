@@ -31,6 +31,7 @@ import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.res.stringResource
 import androidx.compose.ui.platform.LocalContext
+import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
 import androidx.lifecycle.viewmodel.compose.viewModel
 import com.aradrotem.spendwise.R
@@ -145,7 +146,7 @@ fun GroupFormScreen(
                     enabled = !uiState.isSaving,
                     modifier = Modifier.fillMaxWidth()
                 ) {
-                    Text(if (uiState.isEditMode) "Save" else "Create group")
+                    Text(if (uiState.isEditMode) "Update" else "Save")
                 }
             }
         }
@@ -198,7 +199,7 @@ private fun MemberRow(name: String, onRename: (() -> Unit)?, onDelete: () -> Uni
         horizontalArrangement = Arrangement.SpaceBetween,
         verticalAlignment = Alignment.CenterVertically
     ) {
-        Text(name)
+        Text(name, modifier = Modifier.weight(1f), maxLines = 1, overflow = TextOverflow.Ellipsis)
         Row {
             onRename?.let { TextButton(onClick = it) { Text("Rename") } }
             TextButton(onClick = onDelete) { Text("Remove", color = MaterialTheme.colorScheme.error) }
@@ -213,7 +214,12 @@ private fun RenameMemberDialog(member: GroupMemberEntity, onConfirm: (String) ->
         onDismissRequest = onDismiss,
         title = { Text("Rename member") },
         text = {
-            OutlinedTextField(value = text, onValueChange = { text = it }, singleLine = true)
+            OutlinedTextField(
+                value = text,
+                onValueChange = { text = it },
+                label = { Text("Member name") },
+                singleLine = true
+            )
         },
         confirmButton = {
             TextButton(onClick = { onConfirm(text) }) { Text(stringResource(R.string.action_save)) }

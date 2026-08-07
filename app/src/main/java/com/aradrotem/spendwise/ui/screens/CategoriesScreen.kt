@@ -32,6 +32,9 @@ import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.res.stringResource
 import androidx.compose.ui.platform.LocalContext
+import androidx.compose.ui.semantics.contentDescription
+import androidx.compose.ui.semantics.semantics
+import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
 import androidx.lifecycle.viewmodel.compose.viewModel
 import com.aradrotem.spendwise.R
@@ -61,6 +64,7 @@ fun CategoriesScreen(
     var addDialogType by remember { mutableStateOf(TransactionType.EXPENSE) }
     var addCategoryName by remember { mutableStateOf("") }
     var addCategoryError by remember { mutableStateOf<String?>(null) }
+    var isAddingCategory by remember { mutableStateOf(false) }
 
     var categoryPendingDelete by remember { mutableStateOf<CategoryEntity?>(null) }
     var deleteImpactCount by remember { mutableStateOf(0) }
@@ -96,7 +100,8 @@ fun CategoriesScreen(
                     addCategoryName = ""
                     addCategoryError = null
                     showAddDialog = true
-                }
+                },
+                modifier = Modifier.semantics { contentDescription = "Add category" }
             ) {
                 Text("+")
             }
@@ -145,12 +150,15 @@ fun CategoriesScreen(
                 addCategoryError = null
             },
             errorMessage = addCategoryError,
+            isSaving = isAddingCategory,
             onConfirm = {
                 if (addCategoryName.isBlank()) {
                     addCategoryError = "Category name is required"
-                } else {
+                } else if (!isAddingCategory) {
+                    isAddingCategory = true
                     coroutineScope.launch {
                         val error = viewModel.addCategory(addCategoryName, addDialogType)
+                        isAddingCategory = false
                         if (error == null) {
                             showAddDialog = false
                         } else {
@@ -212,7 +220,12 @@ private fun CategoryRow(
         horizontalArrangement = Arrangement.SpaceBetween,
         verticalAlignment = Alignment.CenterVertically
     ) {
-        Text(text = formatCategoryDisplayName(category.name))
+        Text(
+            text = formatCategoryDisplayName(category.name),
+            modifier = Modifier.weight(1f),
+            maxLines = 1,
+            overflow = TextOverflow.Ellipsis
+        )
         if (category.isBuiltIn) {
             Text(
                 text = "Built-in",
@@ -234,6 +247,7 @@ private fun AddCategoryDialog(
     name: String,
     onNameChange: (String) -> Unit,
     errorMessage: String?,
+    isSaving: Boolean,
     onConfirm: () -> Unit,
     onDismiss: () -> Unit
 ) {
@@ -265,12 +279,12 @@ private fun AddCategoryDialog(
             }
         },
         confirmButton = {
-            TextButton(onClick = onConfirm) {
+            TextButton(onClick = onConfirm, enabled = !isSaving) {
                 Text(stringResource(R.string.action_add))
             }
         },
         dismissButton = {
-            TextButton(onClick = onDismiss) {
+            TextButton(onClick = onDismiss, enabled = !isSaving) {
                 Text(stringResource(R.string.action_cancel))
             }
         }
@@ -294,10 +308,11 @@ private fun DeleteCategoryDialog(
     onConfirm: () -> Unit,
     onDismiss: () -> Unit
 ) {
+    val cannotBeUndoneText = stringResource(R.string.dialog_action_cannot_be_undone)
     AlertDialog(
         onDismissRequest = onDismiss,
         title = { Text("Delete category?") },
-        text = { Text(buildDeleteCategoryMessage(categoryName, affectedCount, hasBudget)) },
+        text = { Text(buildDeleteCategoryMessage(categoryName, affectedCount, hasBudget, cannotBeUndoneText)) },
         confirmButton = {
             TextButton(onClick = onConfirm) {
                 Text(stringResource(R.string.action_delete), color = MaterialTheme.colorScheme.error)
@@ -311,7 +326,7 @@ private fun DeleteCategoryDialog(
     )
 }
 
-private fun buildDeleteCategoryMessage(categoryName: String, affectedCount: Int, hasBudget: Boolean): String {
+private fun buildDeleteCategoryMessage(categoryName: String, affectedCount: Int, hasBudget: Boolean, cannotBeUndoneText: String): String {
     val sentences = mutableListOf<String>()
     if (affectedCount > 0) {
         val noun = if (affectedCount == 1) "transaction" else "transactions"
@@ -324,6 +339,6 @@ private fun buildDeleteCategoryMessage(categoryName: String, affectedCount: Int,
     if (sentences.isEmpty()) {
         sentences += "Delete \"$categoryName\"?"
     }
-    sentences += "This action cannot be undone."
+    sentences += cannotBeUndoneText
     return sentences.joinToString(" ")
 }

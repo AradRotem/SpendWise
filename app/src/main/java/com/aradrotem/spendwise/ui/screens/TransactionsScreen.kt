@@ -87,34 +87,37 @@ fun TransactionsScreen(
         }
     }
 
-    Box(modifier = modifier.fillMaxSize()) {
-        when {
-            uiState.isLoading -> {
-                CircularProgressIndicator(modifier = Modifier.align(Alignment.Center))
-            }
-            uiState.transactions.isEmpty() -> {
-                Text(
-                    text = stringResource(R.string.empty_state_no_transactions),
-                    modifier = Modifier.align(Alignment.Center)
-                )
-            }
-            else -> {
-                LazyColumn(modifier = Modifier.fillMaxSize()) {
-                    items(uiState.transactions, key = { it.id }) { transaction ->
-                        TransactionRow(
-                            transaction = transaction,
-                            modifier = Modifier.combinedClickable(
-                                onClick = {},
-                                onLongClick = {
-                                    if (shouldShowGeneratedActionMenu(transaction)) {
-                                        openGeneratedActionMenu(transaction)
-                                    } else {
-                                        actionTransaction = transaction
+    Column(modifier = modifier.fillMaxSize()) {
+        Text("Transactions", style = MaterialTheme.typography.headlineSmall, modifier = Modifier.padding(16.dp))
+        Box(modifier = Modifier.fillMaxSize().weight(1f)) {
+            when {
+                uiState.isLoading -> {
+                    CircularProgressIndicator(modifier = Modifier.align(Alignment.Center))
+                }
+                uiState.transactions.isEmpty() -> {
+                    Text(
+                        text = stringResource(R.string.empty_state_no_transactions),
+                        modifier = Modifier.align(Alignment.Center)
+                    )
+                }
+                else -> {
+                    LazyColumn(modifier = Modifier.fillMaxSize()) {
+                        items(uiState.transactions, key = { it.id }) { transaction ->
+                            TransactionRow(
+                                transaction = transaction,
+                                modifier = Modifier.combinedClickable(
+                                    onClick = {},
+                                    onLongClick = {
+                                        if (shouldShowGeneratedActionMenu(transaction)) {
+                                            openGeneratedActionMenu(transaction)
+                                        } else {
+                                            actionTransaction = transaction
+                                        }
                                     }
-                                }
+                                )
                             )
-                        )
-                        HorizontalDivider()
+                            HorizontalDivider()
+                        }
                     }
                 }
             }

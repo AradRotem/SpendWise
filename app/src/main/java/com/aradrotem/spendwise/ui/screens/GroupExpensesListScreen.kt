@@ -34,7 +34,10 @@ import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.res.stringResource
 import androidx.compose.ui.platform.LocalContext
+import androidx.compose.ui.semantics.contentDescription
+import androidx.compose.ui.semantics.semantics
 import androidx.compose.ui.text.style.TextAlign
+import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
 import androidx.lifecycle.viewmodel.compose.viewModel
 import com.aradrotem.spendwise.R
@@ -70,7 +73,10 @@ fun GroupExpensesListScreen(
             )
         },
         floatingActionButton = {
-            FloatingActionButton(onClick = onAddGroup) { Text("+") }
+            FloatingActionButton(
+                onClick = onAddGroup,
+                modifier = Modifier.semantics { contentDescription = "Add group" }
+            ) { Text("+") }
         }
     ) { innerPadding ->
         when {
@@ -86,7 +92,10 @@ fun GroupExpensesListScreen(
 
             else -> LazyColumn(
                 modifier = Modifier.padding(innerPadding).fillMaxSize(),
-                contentPadding = PaddingValues(16.dp),
+                // Extra bottom padding beyond the usual 16.dp so the "+" FAB - which floats on top
+                // of the list, outside Scaffold's innerPadding - never covers the last group's
+                // overflow menu button. Matches GroupDetailsScreen's LazyColumn for the same reason.
+                contentPadding = PaddingValues(start = 16.dp, end = 16.dp, top = 16.dp, bottom = 96.dp),
                 verticalArrangement = Arrangement.spacedBy(12.dp)
             ) {
                 items(uiState.items, key = { it.group.id }) { item ->
@@ -162,9 +171,18 @@ internal fun GroupSummaryCard(
                 horizontalArrangement = Arrangement.SpaceBetween,
                 verticalAlignment = Alignment.CenterVertically
             ) {
-                Text(item.group.name, style = MaterialTheme.typography.titleMedium)
+                Text(
+                    item.group.name,
+                    style = MaterialTheme.typography.titleMedium,
+                    modifier = Modifier.weight(1f),
+                    maxLines = 1,
+                    overflow = TextOverflow.Ellipsis
+                )
                 Box {
-                    TextButton(onClick = { menuExpanded = true }) { Text("⋮") }
+                    TextButton(
+                        onClick = { menuExpanded = true },
+                        modifier = Modifier.semantics { contentDescription = "More options for ${item.group.name}" }
+                    ) { Text("⋮") }
                     DropdownMenu(expanded = menuExpanded, onDismissRequest = { menuExpanded = false }) {
                         DropdownMenuItem(text = { Text("Edit group") }, onClick = { menuExpanded = false; onEdit() })
                         DropdownMenuItem(text = { Text("Delete group") }, onClick = { menuExpanded = false; onRequestDelete() })
@@ -187,7 +205,12 @@ private fun DeleteGroupDialog(groupName: String, onConfirm: () -> Unit, onDismis
     AlertDialog(
         onDismissRequest = onDismiss,
         title = { Text("Delete \"$groupName\"?") },
-        text = { Text("All members and shared expenses in this group will also be deleted. This action cannot be undone.") },
+        text = {
+            Text(
+                "All members and shared expenses in this group will also be deleted. " +
+                    stringResource(R.string.dialog_action_cannot_be_undone)
+            )
+        },
         confirmButton = {
             TextButton(onClick = onConfirm) { Text(stringResource(R.string.action_delete), color = MaterialTheme.colorScheme.error) }
         },

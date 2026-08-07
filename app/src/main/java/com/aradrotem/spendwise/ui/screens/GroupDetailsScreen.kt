@@ -34,6 +34,9 @@ import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.res.stringResource
 import androidx.compose.ui.platform.LocalContext
+import androidx.compose.ui.semantics.contentDescription
+import androidx.compose.ui.semantics.semantics
+import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
 import androidx.lifecycle.viewmodel.compose.viewModel
 import com.aradrotem.spendwise.R
@@ -132,7 +135,7 @@ fun GroupDetailsScreen(
         AlertDialog(
             onDismissRequest = { expensePendingDelete = null },
             title = { Text("Delete \"${expense.title}\"?") },
-            text = { Text("Balances will update immediately. This action cannot be undone.") },
+            text = { Text("Balances will update immediately. " + stringResource(R.string.dialog_action_cannot_be_undone)) },
             confirmButton = {
                 TextButton(onClick = {
                     viewModel.onDeleteExpense(expense)
@@ -184,14 +187,21 @@ internal fun GroupExpenseRow(
             horizontalArrangement = Arrangement.SpaceBetween,
             verticalAlignment = Alignment.CenterVertically
         ) {
-            Column(verticalArrangement = Arrangement.spacedBy(2.dp)) {
-                Text(expense.title, style = MaterialTheme.typography.titleMedium)
+            Column(modifier = Modifier.weight(1f), verticalArrangement = Arrangement.spacedBy(2.dp)) {
+                Text(expense.title, style = MaterialTheme.typography.titleMedium, maxLines = 1, overflow = TextOverflow.Ellipsis)
                 Text(formatEpochDay(expense.dateEpochDay))
                 Text("${formatAmountInCents(expense.amountCents)} · paid by ${item.payerName}")
-                Text("Split ${splitMethodLabel(expense.splitMethod)} between ${item.participantNames.joinToString(", ")}")
+                Text(
+                    "Split ${splitMethodLabel(expense.splitMethod)} between ${item.participantNames.joinToString(", ")}",
+                    maxLines = 2,
+                    overflow = TextOverflow.Ellipsis
+                )
             }
             Box {
-                TextButton(onClick = { menuExpanded = true }) { Text("⋮") }
+                TextButton(
+                    onClick = { menuExpanded = true },
+                    modifier = Modifier.semantics { contentDescription = "More options for ${expense.title}" }
+                ) { Text("⋮") }
                 DropdownMenu(expanded = menuExpanded, onDismissRequest = { menuExpanded = false }) {
                     DropdownMenuItem(text = { Text(stringResource(R.string.action_edit)) }, onClick = { menuExpanded = false; onEdit() })
                     DropdownMenuItem(text = { Text(stringResource(R.string.action_delete)) }, onClick = { menuExpanded = false; onRequestDelete() })

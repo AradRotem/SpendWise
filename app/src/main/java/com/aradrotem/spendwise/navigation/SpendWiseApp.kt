@@ -9,6 +9,9 @@ import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.getValue
 import androidx.compose.ui.Modifier
+import androidx.compose.ui.semantics.clearAndSetSemantics
+import androidx.compose.ui.semantics.contentDescription
+import androidx.compose.ui.semantics.semantics
 import androidx.navigation.NavGraph.Companion.findStartDestination
 import androidx.navigation.NavType
 import androidx.navigation.compose.NavHost
@@ -35,22 +38,8 @@ import com.aradrotem.spendwise.ui.screens.TransactionsScreen
 fun SpendWiseApp() {
     val navController = rememberNavController()
     val currentRoute = navController.currentBackStackEntryAsState().value?.destination?.route
-    val showBottomBar = currentRoute != Screen.AddTransaction.route &&
-        currentRoute != Screen.EditTransaction.route &&
-        currentRoute != Screen.Categories.route &&
-        currentRoute != Screen.AddRecurringPayment.route &&
-        currentRoute != Screen.EditRecurringPayment.route &&
-        currentRoute != Screen.ReportsAnalytics.route &&
-        currentRoute != Screen.GroupExpenses.route &&
-        currentRoute != Screen.AddGroup.route &&
-        currentRoute != Screen.EditGroup.route &&
-        currentRoute != Screen.GroupDetails.route &&
-        currentRoute != Screen.GroupSettlement.route &&
-        currentRoute != Screen.AddGroupExpense.route &&
-        currentRoute != Screen.EditGroupExpense.route
-    // The Budgets and Recurring Payments screens each have their own "Add" action, so the global
-    // "Add transaction" FAB is hidden there to avoid two competing add actions.
-    val showFab = showBottomBar && currentRoute != Screen.Budgets.route && currentRoute != Screen.RecurringPayments.route
+    val showBottomBar = isBottomBarVisible(currentRoute)
+    val showFab = isFabVisible(currentRoute)
 
     Scaffold(
         bottomBar = {
@@ -68,7 +57,7 @@ fun SpendWiseApp() {
                                     restoreState = true
                                 }
                             },
-                            icon = { Text(item.icon) },
+                            icon = { Text(item.icon, modifier = Modifier.clearAndSetSemantics {}) },
                             label = { Text(item.label) }
                         )
                     }
@@ -77,7 +66,10 @@ fun SpendWiseApp() {
         },
         floatingActionButton = {
             if (showFab) {
-                FloatingActionButton(onClick = { navController.navigate(Screen.AddTransaction.route) }) {
+                FloatingActionButton(
+                    onClick = { navController.navigate(Screen.AddTransaction.route) { launchSingleTop = true } },
+                    modifier = Modifier.semantics { contentDescription = "Add transaction" }
+                ) {
                     Text("+")
                 }
             }
@@ -90,30 +82,30 @@ fun SpendWiseApp() {
         ) {
             composable(Screen.Home.route) {
                 HomeScreen(
-                    onNavigateToBudgets = { navController.navigate(Screen.Budgets.route) },
-                    onViewAllTransactions = { navController.navigate(Screen.Transactions.route) }
+                    onNavigateToBudgets = { navController.navigate(Screen.Budgets.route) { launchSingleTop = true } },
+                    onViewAllTransactions = { navController.navigate(Screen.Transactions.route) { launchSingleTop = true } }
                 )
             }
             composable(Screen.Transactions.route) {
                 TransactionsScreen(
                     onEditTransaction = { transactionId ->
-                        navController.navigate(Screen.EditTransaction.createRoute(transactionId))
+                        navController.navigate(Screen.EditTransaction.createRoute(transactionId)) { launchSingleTop = true }
                     },
                     onEditThisAndFuture = { planId, transactionId ->
-                        navController.navigate(Screen.EditRecurringPayment.createRoute(planId, transactionId))
+                        navController.navigate(Screen.EditRecurringPayment.createRoute(planId, transactionId)) { launchSingleTop = true }
                     },
                     onOpenRecurringPlan = { planId ->
-                        navController.navigate(Screen.EditRecurringPayment.createRoute(planId))
+                        navController.navigate(Screen.EditRecurringPayment.createRoute(planId)) { launchSingleTop = true }
                     }
                 )
             }
             composable(Screen.Budgets.route) { BudgetsScreen() }
             composable(Screen.Settings.route) {
                 SettingsScreen(
-                    onNavigateToCategories = { navController.navigate(Screen.Categories.route) },
-                    onNavigateToRecurringPayments = { navController.navigate(Screen.RecurringPayments.route) },
-                    onNavigateToReportsAnalytics = { navController.navigate(Screen.ReportsAnalytics.route) },
-                    onNavigateToGroupExpenses = { navController.navigate(Screen.GroupExpenses.route) }
+                    onNavigateToCategories = { navController.navigate(Screen.Categories.route) { launchSingleTop = true } },
+                    onNavigateToRecurringPayments = { navController.navigate(Screen.RecurringPayments.route) { launchSingleTop = true } },
+                    onNavigateToReportsAnalytics = { navController.navigate(Screen.ReportsAnalytics.route) { launchSingleTop = true } },
+                    onNavigateToGroupExpenses = { navController.navigate(Screen.GroupExpenses.route) { launchSingleTop = true } }
                 )
             }
             composable(Screen.Categories.route) {
@@ -124,8 +116,8 @@ fun SpendWiseApp() {
             }
             composable(Screen.RecurringPayments.route) {
                 RecurringPaymentsScreen(
-                    onAddPlan = { navController.navigate(Screen.AddRecurringPayment.route) },
-                    onEditPlan = { planId -> navController.navigate(Screen.EditRecurringPayment.createRoute(planId)) },
+                    onAddPlan = { navController.navigate(Screen.AddRecurringPayment.route) { launchSingleTop = true } },
+                    onEditPlan = { planId -> navController.navigate(Screen.EditRecurringPayment.createRoute(planId)) { launchSingleTop = true } },
                     onBack = { navController.popBackStack() }
                 )
             }
@@ -174,9 +166,9 @@ fun SpendWiseApp() {
             }
             composable(Screen.GroupExpenses.route) {
                 GroupExpensesListScreen(
-                    onAddGroup = { navController.navigate(Screen.AddGroup.route) },
-                    onEditGroup = { groupId -> navController.navigate(Screen.EditGroup.createRoute(groupId)) },
-                    onOpenGroup = { groupId -> navController.navigate(Screen.GroupDetails.createRoute(groupId)) },
+                    onAddGroup = { navController.navigate(Screen.AddGroup.route) { launchSingleTop = true } },
+                    onEditGroup = { groupId -> navController.navigate(Screen.EditGroup.createRoute(groupId)) { launchSingleTop = true } },
+                    onOpenGroup = { groupId -> navController.navigate(Screen.GroupDetails.createRoute(groupId)) { launchSingleTop = true } },
                     onBack = { navController.popBackStack() }
                 )
             }
@@ -205,9 +197,9 @@ fun SpendWiseApp() {
                 val groupId = backStackEntry.arguments?.getLong("groupId") ?: return@composable
                 GroupDetailsScreen(
                     groupId = groupId,
-                    onAddExpense = { navController.navigate(Screen.AddGroupExpense.createRoute(groupId)) },
-                    onEditExpense = { expenseId -> navController.navigate(Screen.EditGroupExpense.createRoute(groupId, expenseId)) },
-                    onViewSettlement = { navController.navigate(Screen.GroupSettlement.createRoute(groupId)) },
+                    onAddExpense = { navController.navigate(Screen.AddGroupExpense.createRoute(groupId)) { launchSingleTop = true } },
+                    onEditExpense = { expenseId -> navController.navigate(Screen.EditGroupExpense.createRoute(groupId, expenseId)) { launchSingleTop = true } },
+                    onViewSettlement = { navController.navigate(Screen.GroupSettlement.createRoute(groupId)) { launchSingleTop = true } },
                     onBack = { navController.popBackStack() }
                 )
             }
