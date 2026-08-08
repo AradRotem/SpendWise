@@ -49,9 +49,9 @@ fun TransactionsScreen(
     modifier: Modifier = Modifier,
     viewModel: TransactionsViewModel = viewModel(
         factory = TransactionsViewModel.factory(
-            (LocalContext.current.applicationContext as SpendWiseApplication).transactionRepository,
-            (LocalContext.current.applicationContext as SpendWiseApplication).recurringPaymentRepository,
-            (LocalContext.current.applicationContext as SpendWiseApplication).recurringOccurrenceManager
+            (LocalContext.current.applicationContext as SpendWiseApplication).repositories.transactionRepository,
+            (LocalContext.current.applicationContext as SpendWiseApplication).repositories.recurringPaymentRepository,
+            (LocalContext.current.applicationContext as SpendWiseApplication).repositories.recurringOccurrenceManager
         )
     )
 ) {

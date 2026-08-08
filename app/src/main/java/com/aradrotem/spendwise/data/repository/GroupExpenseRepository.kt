@@ -8,6 +8,9 @@ import com.aradrotem.spendwise.data.local.GroupExpenseShareEntity
 import com.aradrotem.spendwise.data.local.GroupMemberDao
 import com.aradrotem.spendwise.data.local.GroupMemberEntity
 import com.aradrotem.spendwise.data.local.GroupSplitMethod
+import com.aradrotem.spendwise.data.sync.SyncEntityType
+import com.aradrotem.spendwise.data.sync.SyncMetadataDao
+import com.aradrotem.spendwise.data.sync.SyncStamper
 import kotlinx.coroutines.flow.Flow
 
 // Wraps the three closely-coupled group-expense DAOs (a group's members, expenses and shares are
@@ -17,8 +20,13 @@ import kotlinx.coroutines.flow.Flow
 class GroupExpenseRepository(
     private val groupDao: ExpenseGroupDao,
     private val memberDao: GroupMemberDao,
-    private val expenseDao: GroupExpenseDao
+    private val expenseDao: GroupExpenseDao,
+    syncMetadataDao: SyncMetadataDao? = null
 ) {
+    private val groupSyncStamper = SyncStamper(syncMetadataDao, SyncEntityType.GROUP)
+    private val memberSyncStamper = SyncStamper(syncMetadataDao, SyncEntityType.GROUP_MEMBER)
+    private val expenseSyncStamper = SyncStamper(syncMetadataDao, SyncEntityType.GROUP_EXPENSE)
+    private val shareSyncStamper = SyncStamper(syncMetadataDao, SyncEntityType.GROUP_EXPENSE_SHARE)
 
     fun observeGroups(): Flow<List<ExpenseGroupEntity>> = groupDao.observeAll()
 
@@ -56,8 +64,10 @@ class GroupExpenseRepository(
         }
 
         val groupId = groupDao.insert(ExpenseGroupEntity(name = trimmedName))
+        groupSyncStamper.markDirty(groupId)
         trimmedMemberNames.forEach { memberName ->
-            memberDao.insert(GroupMemberEntity(groupId = groupId, name = memberName))
+            val memberId = memberDao.insert(GroupMemberEntity(groupId = groupId, name = memberName))
+            memberSyncStamper.markDirty(memberId)
         }
         return Result.success(groupId)
     }
@@ -69,12 +79,16 @@ class GroupExpenseRepository(
         }
         val existing = groupDao.getById(id) ?: return Result.failure(IllegalStateException("Group not found"))
         groupDao.update(existing.copy(name = trimmedName))
+        groupSyncStamper.markDirty(id)
         return Result.success(Unit)
     }
 
     // Members/expenses/shares all cascade-delete via their foreign keys, so this single call
     // removes the group's entire dataset.
-    suspend fun deleteGroup(group: ExpenseGroupEntity) = groupDao.delete(group)
+    suspend fun deleteGroup(group: ExpenseGroupEntity) {
+        groupDao.delete(group)
+        groupSyncStamper.markDeleted(group.id)
+    }
 
     suspend fun addMember(groupId: Long, name: String): Result<Long> {
         val trimmedName = name.trim()
@@ -84,7 +98,9 @@ class GroupExpenseRepository(
         if (memberDao.countByNormalizedName(groupId, trimmedName) > 0) {
             return Result.failure(IllegalArgumentException("A member with this name already exists in this group"))
         }
-        return Result.success(memberDao.insert(GroupMemberEntity(groupId = groupId, name = trimmedName)))
+        val memberId = memberDao.insert(GroupMemberEntity(groupId = groupId, name = trimmedName))
+        memberSyncStamper.markDirty(memberId)
+        return Result.success(memberId)
     }
 
     suspend fun renameMember(memberId: Long, name: String): Result<Unit> {
@@ -97,6 +113,7 @@ class GroupExpenseRepository(
             return Result.failure(IllegalArgumentException("A member with this name already exists in this group"))
         }
         memberDao.update(existing.copy(name = trimmedName))
+        memberSyncStamper.markDirty(memberId)
         return Result.success(Unit)
     }
 
@@ -113,6 +130,7 @@ class GroupExpenseRepository(
             )
         }
         memberDao.delete(member)
+        memberSyncStamper.markDeleted(member.id)
         return Result.success(Unit)
     }
 
@@ -144,6 +162,8 @@ class GroupExpenseRepository(
             ),
             shares.map { (memberId, shareCents) -> GroupExpenseShareEntity(expenseId = 0, memberId = memberId, shareAmountCents = shareCents) }
         )
+        expenseSyncStamper.markDirty(expenseId)
+        expenseDao.getSharesForExpense(expenseId).forEach { shareSyncStamper.markDirty(it.id) }
         return Result.success(expenseId)
     }
 
@@ -173,10 +193,19 @@ class GroupExpenseRepository(
             ),
             shares.map { (memberId, shareCents) -> GroupExpenseShareEntity(expenseId = id, memberId = memberId, shareAmountCents = shareCents) }
         )
+        expenseSyncStamper.markDirty(id)
+        // updateExpenseWithShares fully replaces the share rows (delete-then-insert), so every
+        // resulting share is re-stamped rather than diffed against the old set.
+        expenseDao.getSharesForExpense(id).forEach { shareSyncStamper.markDirty(it.id) }
         return Result.success(Unit)
     }
 
-    suspend fun deleteExpense(expense: GroupExpenseEntity) = expenseDao.deleteExpense(expense)
+    suspend fun deleteExpense(expense: GroupExpenseEntity) {
+        val shareIds = expenseDao.getSharesForExpense(expense.id).map { it.id }
+        expenseDao.deleteExpense(expense)
+        expenseSyncStamper.markDeleted(expense.id)
+        shareIds.forEach { shareSyncStamper.markDeleted(it) }
+    }
 
     private suspend fun validateExpenseInput(
         groupId: Long,

@@ -2,9 +2,16 @@ package com.aradrotem.spendwise.data.repository
 
 import com.aradrotem.spendwise.data.local.BudgetDao
 import com.aradrotem.spendwise.data.local.BudgetEntity
+import com.aradrotem.spendwise.data.sync.SyncEntityType
+import com.aradrotem.spendwise.data.sync.SyncMetadataDao
+import com.aradrotem.spendwise.data.sync.SyncStamper
 import kotlinx.coroutines.flow.Flow
 
-class BudgetRepository(private val budgetDao: BudgetDao) {
+class BudgetRepository(
+    private val budgetDao: BudgetDao,
+    syncMetadataDao: SyncMetadataDao? = null
+) {
+    private val syncStamper = SyncStamper(syncMetadataDao, SyncEntityType.BUDGET)
 
     fun observeAll(): Flow<List<BudgetEntity>> = budgetDao.observeAll()
 
@@ -18,7 +25,8 @@ class BudgetRepository(private val budgetDao: BudgetDao) {
         if (existing != null) {
             return Result.failure(IllegalStateException("A budget for \"$categoryName\" already exists"))
         }
-        budgetDao.insert(BudgetEntity(categoryName = categoryName, monthlyLimitCents = monthlyLimitCents))
+        val id = budgetDao.insert(BudgetEntity(categoryName = categoryName, monthlyLimitCents = monthlyLimitCents))
+        syncStamper.markDirty(id)
         return Result.success(Unit)
     }
 
@@ -27,8 +35,12 @@ class BudgetRepository(private val budgetDao: BudgetDao) {
             return Result.failure(IllegalArgumentException("Monthly limit must be greater than zero"))
         }
         budgetDao.update(BudgetEntity(id = id, categoryName = categoryName, monthlyLimitCents = monthlyLimitCents))
+        syncStamper.markDirty(id)
         return Result.success(Unit)
     }
 
-    suspend fun deleteBudget(budget: BudgetEntity) = budgetDao.delete(budget)
+    suspend fun deleteBudget(budget: BudgetEntity) {
+        budgetDao.delete(budget)
+        syncStamper.markDeleted(budget.id)
+    }
 }

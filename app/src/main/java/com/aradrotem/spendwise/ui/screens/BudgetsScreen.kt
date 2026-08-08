@@ -45,9 +45,9 @@ fun BudgetsScreen(
     modifier: Modifier = Modifier,
     viewModel: BudgetsViewModel = viewModel(
         factory = BudgetsViewModel.factory(
-            (LocalContext.current.applicationContext as SpendWiseApplication).budgetRepository,
-            (LocalContext.current.applicationContext as SpendWiseApplication).categoryRepository,
-            (LocalContext.current.applicationContext as SpendWiseApplication).transactionRepository
+            (LocalContext.current.applicationContext as SpendWiseApplication).repositories.budgetRepository,
+            (LocalContext.current.applicationContext as SpendWiseApplication).repositories.categoryRepository,
+            (LocalContext.current.applicationContext as SpendWiseApplication).repositories.transactionRepository
         )
     )
 ) {

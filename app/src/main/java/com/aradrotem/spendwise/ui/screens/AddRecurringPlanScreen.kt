@@ -50,11 +50,11 @@ fun AddRecurringPlanScreen(
     occurrenceTransactionId: Long? = null,
     viewModel: AddRecurringPlanViewModel = viewModel(
         factory = AddRecurringPlanViewModel.factory(
-            (LocalContext.current.applicationContext as SpendWiseApplication).recurringPaymentRepository,
-            (LocalContext.current.applicationContext as SpendWiseApplication).categoryRepository,
-            (LocalContext.current.applicationContext as SpendWiseApplication).transactionRepository,
-            (LocalContext.current.applicationContext as SpendWiseApplication).recurringPaymentGenerator,
-            (LocalContext.current.applicationContext as SpendWiseApplication).recurringOccurrenceManager,
+            (LocalContext.current.applicationContext as SpendWiseApplication).repositories.recurringPaymentRepository,
+            (LocalContext.current.applicationContext as SpendWiseApplication).repositories.categoryRepository,
+            (LocalContext.current.applicationContext as SpendWiseApplication).repositories.transactionRepository,
+            (LocalContext.current.applicationContext as SpendWiseApplication).repositories.recurringPaymentGenerator,
+            (LocalContext.current.applicationContext as SpendWiseApplication).repositories.recurringOccurrenceManager,
             planId,
             occurrenceTransactionId
         )

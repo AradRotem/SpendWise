@@ -43,8 +43,8 @@ fun HomeScreen(
     modifier: Modifier = Modifier,
     viewModel: HomeViewModel = viewModel(
         factory = HomeViewModel.factory(
-            (LocalContext.current.applicationContext as SpendWiseApplication).transactionRepository,
-            (LocalContext.current.applicationContext as SpendWiseApplication).budgetRepository
+            (LocalContext.current.applicationContext as SpendWiseApplication).repositories.transactionRepository,
+            (LocalContext.current.applicationContext as SpendWiseApplication).repositories.budgetRepository
         )
     )
 ) {

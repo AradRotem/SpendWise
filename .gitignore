@@ -15,3 +15,6 @@
 local.properties
 
 .kotlin/
+
+# Firebase project config — contains project-specific keys, never commit
+app/google-services.json

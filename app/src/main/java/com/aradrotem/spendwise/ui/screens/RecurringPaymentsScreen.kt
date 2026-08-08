@@ -51,10 +51,10 @@ fun RecurringPaymentsScreen(
     modifier: Modifier = Modifier,
     viewModel: RecurringPlansViewModel = viewModel(
         factory = RecurringPlansViewModel.factory(
-            (LocalContext.current.applicationContext as SpendWiseApplication).recurringPaymentRepository,
-            (LocalContext.current.applicationContext as SpendWiseApplication).transactionRepository,
-            (LocalContext.current.applicationContext as SpendWiseApplication).recurringOccurrenceExceptionRepository,
-            (LocalContext.current.applicationContext as SpendWiseApplication).recurringPaymentGenerator
+            (LocalContext.current.applicationContext as SpendWiseApplication).repositories.recurringPaymentRepository,
+            (LocalContext.current.applicationContext as SpendWiseApplication).repositories.transactionRepository,
+            (LocalContext.current.applicationContext as SpendWiseApplication).repositories.recurringOccurrenceExceptionRepository,
+            (LocalContext.current.applicationContext as SpendWiseApplication).repositories.recurringPaymentGenerator
         )
     )
 ) {

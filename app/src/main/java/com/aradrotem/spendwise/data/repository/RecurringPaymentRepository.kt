@@ -4,11 +4,18 @@ import com.aradrotem.spendwise.data.local.RecurringPaymentPlanDao
 import com.aradrotem.spendwise.data.local.RecurringPaymentPlanEntity
 import com.aradrotem.spendwise.data.local.RecurringPlanStatus
 import com.aradrotem.spendwise.data.local.RecurringPlanType
+import com.aradrotem.spendwise.data.sync.SyncEntityType
+import com.aradrotem.spendwise.data.sync.SyncMetadataDao
+import com.aradrotem.spendwise.data.sync.SyncStamper
 import kotlinx.coroutines.flow.Flow
 import java.time.Instant
 import java.time.ZoneId
 
-class RecurringPaymentRepository(private val planDao: RecurringPaymentPlanDao) {
+class RecurringPaymentRepository(
+    private val planDao: RecurringPaymentPlanDao,
+    syncMetadataDao: SyncMetadataDao? = null
+) {
+    private val syncStamper = SyncStamper(syncMetadataDao, SyncEntityType.RECURRING_PLAN)
 
     fun observeAll(): Flow<List<RecurringPaymentPlanEntity>> = planDao.observeAll()
 
@@ -33,7 +40,7 @@ class RecurringPaymentRepository(private val planDao: RecurringPaymentPlanDao) {
         if (amountInCents <= 0L) {
             return Result.failure(IllegalArgumentException("Amount must be greater than zero"))
         }
-        planDao.insert(
+        val id = planDao.insert(
             RecurringPaymentPlanEntity(
                 type = type,
                 title = title,
@@ -45,6 +52,7 @@ class RecurringPaymentRepository(private val planDao: RecurringPaymentPlanDao) {
                 endDateMillis = endDateMillis
             )
         )
+        syncStamper.markDirty(id)
         return Result.success(Unit)
     }
 
@@ -64,7 +72,7 @@ class RecurringPaymentRepository(private val planDao: RecurringPaymentPlanDao) {
             return Result.failure(IllegalArgumentException("Installment count must be greater than zero"))
         }
         val preferredDayOfMonth = Instant.ofEpochMilli(firstPaymentDateMillis).atZone(zoneId).toLocalDate().dayOfMonth
-        planDao.insert(
+        val id = planDao.insert(
             RecurringPaymentPlanEntity(
                 type = RecurringPlanType.INSTALLMENT,
                 title = title,
@@ -76,6 +84,7 @@ class RecurringPaymentRepository(private val planDao: RecurringPaymentPlanDao) {
                 preferredDayOfMonth = preferredDayOfMonth
             )
         )
+        syncStamper.markDirty(id)
         return Result.success(Unit)
     }
 
@@ -106,6 +115,7 @@ class RecurringPaymentRepository(private val planDao: RecurringPaymentPlanDao) {
                 endDateMillis = endDateMillis
             )
         )
+        syncStamper.markDirty(id)
         return Result.success(Unit)
     }
 
@@ -144,18 +154,31 @@ class RecurringPaymentRepository(private val planDao: RecurringPaymentPlanDao) {
                 totalInstallments = totalInstallments
             )
         )
+        syncStamper.markDirty(id)
         return Result.success(Unit)
     }
 
-    suspend fun pause(id: Long) = planDao.updateStatus(id, RecurringPlanStatus.PAUSED)
+    suspend fun pause(id: Long) {
+        planDao.updateStatus(id, RecurringPlanStatus.PAUSED)
+        syncStamper.markDirty(id)
+    }
 
     // Shared by both "Resume" (from PAUSED) and "Restore" (from STOPPED): both mean "make this
     // plan generate again"; the caller is expected to re-run generation afterward for catch-up.
-    suspend fun resume(id: Long) = planDao.updateStatus(id, RecurringPlanStatus.ACTIVE)
+    suspend fun resume(id: Long) {
+        planDao.updateStatus(id, RecurringPlanStatus.ACTIVE)
+        syncStamper.markDirty(id)
+    }
 
-    suspend fun stop(id: Long) = planDao.updateStatus(id, RecurringPlanStatus.STOPPED)
+    suspend fun stop(id: Long) {
+        planDao.updateStatus(id, RecurringPlanStatus.STOPPED)
+        syncStamper.markDirty(id)
+    }
 
-    suspend fun markCompleted(id: Long) = planDao.updateStatus(id, RecurringPlanStatus.COMPLETED)
+    suspend fun markCompleted(id: Long) {
+        planDao.updateStatus(id, RecurringPlanStatus.COMPLETED)
+        syncStamper.markDirty(id)
+    }
 
     // "Delete this and future" for a monthly plan (see RecurringOccurrenceManager): stops the
     // plan AND caps its schedule with an end date. Both together, not just STOPPED status, so a
@@ -164,6 +187,7 @@ class RecurringPaymentRepository(private val planDao: RecurringPaymentPlanDao) {
     suspend fun stopWithEndDate(id: Long, endDateMillis: Long) {
         val existing = planDao.getById(id) ?: return
         planDao.update(existing.copy(endDateMillis = endDateMillis, status = RecurringPlanStatus.STOPPED))
+        syncStamper.markDirty(id)
     }
 
     // "Delete this and future" for an installment plan: caps totalInstallments at the count that
@@ -174,9 +198,13 @@ class RecurringPaymentRepository(private val planDao: RecurringPaymentPlanDao) {
         planDao.update(
             existing.copy(totalInstallments = newTotalInstallments.coerceAtLeast(0), status = RecurringPlanStatus.STOPPED)
         )
+        syncStamper.markDirty(id)
     }
 
     // Removes the plan itself only. Already-generated transactions are untouched (no FK/cascade
     // - see RecurringPaymentPlanEntity), so financial history is preserved.
-    suspend fun deletePlan(plan: RecurringPaymentPlanEntity) = planDao.delete(plan)
+    suspend fun deletePlan(plan: RecurringPaymentPlanEntity) {
+        planDao.delete(plan)
+        syncStamper.markDeleted(plan.id)
+    }
 }

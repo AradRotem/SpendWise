@@ -5,6 +5,8 @@ import androidx.activity.ComponentActivity
 import androidx.activity.compose.setContent
 import androidx.activity.enableEdgeToEdge
 import androidx.lifecycle.lifecycleScope
+import androidx.lifecycle.repeatOnLifecycle
+import androidx.lifecycle.Lifecycle
 import com.aradrotem.spendwise.navigation.SpendWiseApp
 import com.aradrotem.spendwise.ui.theme.SpendWiseTheme
 import kotlinx.coroutines.Dispatchers
@@ -19,6 +21,19 @@ class MainActivity : ComponentActivity() {
                 SpendWiseApp()
             }
         }
+
+        // The active account's database can be swapped out from under this Activity's already-
+        // constructed ViewModels (login, logout, account switch) - see SpendWiseApplication and
+        // AuthSessionCoordinator. Recreating is the simplest way to guarantee no screen keeps a
+        // stale repository reference afterward.
+        val app = application as SpendWiseApplication
+        lifecycleScope.launch {
+            repeatOnLifecycle(Lifecycle.State.STARTED) {
+                app.recreateSignal.collect {
+                    recreate()
+                }
+            }
+        }
     }
 
     // Generation is idempotent, so re-running it whenever the app returns to the foreground
@@ -28,7 +43,8 @@ class MainActivity : ComponentActivity() {
         super.onResume()
         val app = application as SpendWiseApplication
         lifecycleScope.launch(Dispatchers.IO) {
-            app.recurringPaymentGenerator.generateDuePayments()
+            app.repositories.recurringPaymentGenerator.generateDuePayments()
         }
+        app.triggerSync()
     }
 }

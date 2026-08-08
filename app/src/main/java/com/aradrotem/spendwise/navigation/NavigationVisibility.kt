@@ -4,6 +4,11 @@ package com.aradrotem.spendwise.navigation
 // list) rather than being a top-level destination themselves - the global bottom bar is hidden on
 // all of them so the screen's own back button is the only way back.
 private val ROUTES_WITHOUT_BOTTOM_BAR = setOf(
+    Screen.Splash.route,
+    Screen.Login.route,
+    Screen.SignUp.route,
+    Screen.ForgotPassword.route,
+    Screen.Account.route,
     Screen.AddTransaction.route,
     Screen.EditTransaction.route,
     Screen.Categories.route,

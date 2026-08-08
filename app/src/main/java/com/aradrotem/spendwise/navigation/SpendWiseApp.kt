@@ -19,9 +19,15 @@ import androidx.navigation.compose.composable
 import androidx.navigation.compose.currentBackStackEntryAsState
 import androidx.navigation.compose.rememberNavController
 import androidx.navigation.navArgument
+import com.aradrotem.spendwise.ui.screens.AccountScreen
 import com.aradrotem.spendwise.ui.screens.AddRecurringPlanScreen
 import com.aradrotem.spendwise.ui.screens.AddTransactionScreen
 import com.aradrotem.spendwise.ui.screens.BudgetsScreen
+import com.aradrotem.spendwise.ui.screens.ForgotPasswordScreen
+import com.aradrotem.spendwise.ui.screens.LoginScreen
+import com.aradrotem.spendwise.ui.screens.SignUpScreen
+import com.aradrotem.spendwise.ui.screens.SplashDestination
+import com.aradrotem.spendwise.ui.screens.SplashScreen
 import com.aradrotem.spendwise.ui.screens.CategoriesScreen
 import com.aradrotem.spendwise.ui.screens.GroupDetailsScreen
 import com.aradrotem.spendwise.ui.screens.GroupExpenseFormScreen
@@ -77,9 +83,53 @@ fun SpendWiseApp() {
     ) { innerPadding ->
         NavHost(
             navController = navController,
-            startDestination = Screen.Home.route,
+            startDestination = Screen.Splash.route,
             modifier = Modifier.padding(innerPadding)
         ) {
+            composable(Screen.Splash.route) {
+                SplashScreen(
+                    onResolved = { destination ->
+                        val target = if (destination == SplashDestination.HOME) Screen.Home.route else Screen.Login.route
+                        navController.navigate(target) {
+                            popUpTo(Screen.Splash.route) { inclusive = true }
+                        }
+                    }
+                )
+            }
+            composable(Screen.Login.route) {
+                LoginScreen(
+                    onLoginSuccess = {
+                        navController.navigate(Screen.Home.route) {
+                            popUpTo(Screen.Login.route) { inclusive = true }
+                        }
+                    },
+                    onNavigateToSignUp = { navController.navigate(Screen.SignUp.route) { launchSingleTop = true } },
+                    onNavigateToForgotPassword = { navController.navigate(Screen.ForgotPassword.route) { launchSingleTop = true } }
+                )
+            }
+            composable(Screen.SignUp.route) {
+                SignUpScreen(
+                    onSignUpSuccess = {
+                        navController.navigate(Screen.Home.route) {
+                            popUpTo(Screen.Login.route) { inclusive = true }
+                        }
+                    },
+                    onBack = { navController.popBackStack() }
+                )
+            }
+            composable(Screen.ForgotPassword.route) {
+                ForgotPasswordScreen(onBack = { navController.popBackStack() })
+            }
+            composable(Screen.Account.route) {
+                AccountScreen(
+                    onLoggedOut = {
+                        navController.navigate(Screen.Login.route) {
+                            popUpTo(0) { inclusive = true }
+                        }
+                    },
+                    onBack = { navController.popBackStack() }
+                )
+            }
             composable(Screen.Home.route) {
                 HomeScreen(
                     onNavigateToBudgets = { navController.navigate(Screen.Budgets.route) { launchSingleTop = true } },
@@ -105,7 +155,8 @@ fun SpendWiseApp() {
                     onNavigateToCategories = { navController.navigate(Screen.Categories.route) { launchSingleTop = true } },
                     onNavigateToRecurringPayments = { navController.navigate(Screen.RecurringPayments.route) { launchSingleTop = true } },
                     onNavigateToReportsAnalytics = { navController.navigate(Screen.ReportsAnalytics.route) { launchSingleTop = true } },
-                    onNavigateToGroupExpenses = { navController.navigate(Screen.GroupExpenses.route) { launchSingleTop = true } }
+                    onNavigateToGroupExpenses = { navController.navigate(Screen.GroupExpenses.route) { launchSingleTop = true } },
+                    onNavigateToAccount = { navController.navigate(Screen.Account.route) { launchSingleTop = true } }
                 )
             }
             composable(Screen.Categories.route) {

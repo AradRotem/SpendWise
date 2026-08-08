@@ -77,9 +77,9 @@ fun ReportsAnalyticsScreen(
     modifier: Modifier = Modifier,
     viewModel: ReportsAnalyticsViewModel = viewModel(
         factory = ReportsAnalyticsViewModel.factory(
-            (LocalContext.current.applicationContext as SpendWiseApplication).transactionRepository,
-            (LocalContext.current.applicationContext as SpendWiseApplication).categoryRepository,
-            (LocalContext.current.applicationContext as SpendWiseApplication).budgetRepository
+            (LocalContext.current.applicationContext as SpendWiseApplication).repositories.transactionRepository,
+            (LocalContext.current.applicationContext as SpendWiseApplication).repositories.categoryRepository,
+            (LocalContext.current.applicationContext as SpendWiseApplication).repositories.budgetRepository
         )
     )
 ) {

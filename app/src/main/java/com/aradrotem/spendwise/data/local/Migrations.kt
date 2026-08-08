@@ -4,6 +4,48 @@ import androidx.room.migration.Migration
 import androidx.sqlite.SQLiteConnection
 import androidx.sqlite.execSQL
 
+// Adds Step 17's generic sync bookkeeping tables. Both are entirely new, additive tables -
+// non-destructive, does not touch any existing data. sync_metadata tracks per-row cloud-sync
+// state (one table for all entity types instead of adding sync columns to every one of them);
+// legacy_import_map durably records which pre-auth rows have already been copied into a
+// per-account database, so the one-time legacy import can resume safely after an interruption.
+val MIGRATION_7_8: Migration = object : Migration(7, 8) {
+    override fun migrate(connection: SQLiteConnection) {
+        connection.execSQL(
+            "CREATE TABLE IF NOT EXISTS `sync_metadata` (" +
+                "`id` INTEGER PRIMARY KEY AUTOINCREMENT NOT NULL, " +
+                "`entityType` TEXT NOT NULL, " +
+                "`localId` INTEGER NOT NULL, " +
+                "`syncId` TEXT NOT NULL, " +
+                "`updatedAt` INTEGER NOT NULL, " +
+                "`isDeleted` INTEGER NOT NULL DEFAULT 0, " +
+                "`pendingSync` INTEGER NOT NULL DEFAULT 1)"
+        )
+        connection.execSQL(
+            "CREATE UNIQUE INDEX IF NOT EXISTS `index_sync_metadata_entityType_localId` " +
+                "ON `sync_metadata` (`entityType`, `localId`)"
+        )
+        connection.execSQL(
+            "CREATE UNIQUE INDEX IF NOT EXISTS `index_sync_metadata_syncId` ON `sync_metadata` (`syncId`)"
+        )
+        connection.execSQL(
+            "CREATE INDEX IF NOT EXISTS `index_sync_metadata_pendingSync` ON `sync_metadata` (`pendingSync`)"
+        )
+
+        connection.execSQL(
+            "CREATE TABLE IF NOT EXISTS `legacy_import_map` (" +
+                "`id` INTEGER PRIMARY KEY AUTOINCREMENT NOT NULL, " +
+                "`entityType` TEXT NOT NULL, " +
+                "`legacyLocalId` INTEGER NOT NULL, " +
+                "`newLocalId` INTEGER NOT NULL)"
+        )
+        connection.execSQL(
+            "CREATE UNIQUE INDEX IF NOT EXISTS `index_legacy_import_map_entityType_legacyLocalId` " +
+                "ON `legacy_import_map` (`entityType`, `legacyLocalId`)"
+        )
+    }
+}
+
 // Explicit, stable seed data for the built-in categories. Intentionally not derived from
 // TransactionCategory, since that enum may change independently of this historical migration.
 internal data class BuiltInCategorySeed(

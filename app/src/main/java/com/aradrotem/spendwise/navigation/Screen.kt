@@ -1,6 +1,11 @@
 package com.aradrotem.spendwise.navigation
 
 sealed class Screen(val route: String) {
+    data object Splash : Screen("splash")
+    data object Login : Screen("login")
+    data object SignUp : Screen("signup")
+    data object ForgotPassword : Screen("forgot_password")
+    data object Account : Screen("account")
     data object Home : Screen("home")
     data object Transactions : Screen("transactions")
     data object Budgets : Screen("budgets")

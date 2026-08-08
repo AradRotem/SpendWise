@@ -5,10 +5,20 @@ import com.aradrotem.spendwise.data.local.CategoryDao
 import com.aradrotem.spendwise.data.local.CategoryEntity
 import com.aradrotem.spendwise.data.local.TransactionType
 import com.aradrotem.spendwise.data.local.builtInCategorySeeds
+import com.aradrotem.spendwise.data.sync.SyncEntityType
+import com.aradrotem.spendwise.data.sync.SyncMetadataDao
+import com.aradrotem.spendwise.data.sync.SyncStamper
 import com.aradrotem.spendwise.util.formatCategoryDisplayName
 import kotlinx.coroutines.flow.Flow
 
-class CategoryRepository(private val categoryDao: CategoryDao) {
+class CategoryRepository(
+    private val categoryDao: CategoryDao,
+    syncMetadataDao: SyncMetadataDao? = null
+) {
+    // Only custom categories are ever synced - every account seeds its own identical set of
+    // built-ins locally (see ensureBuiltInCategoriesSeeded), so there's nothing useful to upload
+    // for those rows.
+    private val syncStamper = SyncStamper(syncMetadataDao, SyncEntityType.CATEGORY)
 
     fun observeByType(type: TransactionType): Flow<List<CategoryEntity>> = categoryDao.observeByType(type)
 
@@ -22,7 +32,7 @@ class CategoryRepository(private val categoryDao: CategoryDao) {
         if (existing != null) {
             return Result.failure(IllegalStateException("A category named \"$trimmed\" already exists"))
         }
-        categoryDao.insert(
+        val id = categoryDao.insert(
             CategoryEntity(
                 name = formatCategoryDisplayName(trimmed),
                 normalizedName = normalized,
@@ -30,12 +40,14 @@ class CategoryRepository(private val categoryDao: CategoryDao) {
                 isBuiltIn = false
             )
         )
+        syncStamper.markDirty(id)
         return Result.success(Unit)
     }
 
     suspend fun deleteCustomCategory(category: CategoryEntity) {
         check(!category.isBuiltIn) { "Built-in categories cannot be deleted" }
         categoryDao.deleteCustomCategoryAndReassign(category)
+        syncStamper.markDeleted(category.id)
     }
 
     // Idempotent: relies on the categories table's unique (normalizedName, type) index plus

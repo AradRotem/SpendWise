@@ -4,9 +4,16 @@ import com.aradrotem.spendwise.data.local.CategoryMonthlyTotal
 import com.aradrotem.spendwise.data.local.TransactionDao
 import com.aradrotem.spendwise.data.local.TransactionEntity
 import com.aradrotem.spendwise.data.local.TransactionType
+import com.aradrotem.spendwise.data.sync.SyncEntityType
+import com.aradrotem.spendwise.data.sync.SyncMetadataDao
+import com.aradrotem.spendwise.data.sync.SyncStamper
 import kotlinx.coroutines.flow.Flow
 
-class TransactionRepository(private val transactionDao: TransactionDao) {
+class TransactionRepository(
+    private val transactionDao: TransactionDao,
+    syncMetadataDao: SyncMetadataDao? = null
+) {
+    private val syncStamper = SyncStamper(syncMetadataDao, SyncEntityType.TRANSACTION)
 
     fun observeAll(): Flow<List<TransactionEntity>> = transactionDao.observeAll()
 
@@ -29,11 +36,21 @@ class TransactionRepository(private val transactionDao: TransactionDao) {
     suspend fun countByCategoryAndType(categoryName: String, type: TransactionType): Int =
         transactionDao.countByCategoryAndType(categoryName, type)
 
-    suspend fun insert(transaction: TransactionEntity): Long = transactionDao.insert(transaction)
+    suspend fun insert(transaction: TransactionEntity): Long {
+        val id = transactionDao.insert(transaction)
+        syncStamper.markDirty(id)
+        return id
+    }
 
-    suspend fun update(transaction: TransactionEntity) = transactionDao.update(transaction)
+    suspend fun update(transaction: TransactionEntity) {
+        transactionDao.update(transaction)
+        syncStamper.markDirty(transaction.id)
+    }
 
-    suspend fun delete(transaction: TransactionEntity) = transactionDao.delete(transaction)
+    suspend fun delete(transaction: TransactionEntity) {
+        transactionDao.delete(transaction)
+        syncStamper.markDeleted(transaction.id)
+    }
 
     fun observeByPlan(planId: Long): Flow<List<TransactionEntity>> = transactionDao.observeByPlan(planId)
 

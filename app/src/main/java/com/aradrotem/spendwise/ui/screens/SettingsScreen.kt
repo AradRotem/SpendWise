@@ -19,6 +19,7 @@ fun SettingsScreen(
     onNavigateToRecurringPayments: () -> Unit,
     onNavigateToReportsAnalytics: () -> Unit,
     onNavigateToGroupExpenses: () -> Unit,
+    onNavigateToAccount: () -> Unit,
     modifier: Modifier = Modifier
 ) {
     Column(modifier = modifier.fillMaxSize()) {
@@ -51,6 +52,13 @@ fun SettingsScreen(
             modifier = Modifier
                 .fillMaxWidth()
                 .clickable(onClick = onNavigateToGroupExpenses)
+        )
+        ListItem(
+            headlineContent = { Text("Account") },
+            supportingContent = { Text("Profile, sync status, and sign out") },
+            modifier = Modifier
+                .fillMaxWidth()
+                .clickable(onClick = onNavigateToAccount)
         )
     }
 }

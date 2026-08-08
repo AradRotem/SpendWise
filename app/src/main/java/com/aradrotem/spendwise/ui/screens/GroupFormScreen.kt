@@ -47,7 +47,7 @@ fun GroupFormScreen(
     modifier: Modifier = Modifier,
     viewModel: GroupFormViewModel = viewModel(
         factory = GroupFormViewModel.factory(
-            (LocalContext.current.applicationContext as SpendWiseApplication).groupExpenseRepository,
+            (LocalContext.current.applicationContext as SpendWiseApplication).repositories.groupExpenseRepository,
             groupId
         )
     )

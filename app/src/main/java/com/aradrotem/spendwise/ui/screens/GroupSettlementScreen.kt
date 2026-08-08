@@ -44,7 +44,7 @@ fun GroupSettlementScreen(
     modifier: Modifier = Modifier,
     viewModel: GroupDetailsViewModel = viewModel(
         factory = GroupDetailsViewModel.factory(
-            (LocalContext.current.applicationContext as SpendWiseApplication).groupExpenseRepository,
+            (LocalContext.current.applicationContext as SpendWiseApplication).repositories.groupExpenseRepository,
             groupId
         )
     )
