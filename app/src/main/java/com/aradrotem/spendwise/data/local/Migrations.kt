@@ -46,6 +46,28 @@ val MIGRATION_7_8: Migration = object : Migration(7, 8) {
     }
 }
 
+// Step 18: adds at-most-one-receipt-per-transaction support. All new transactions columns are
+// nullable/defaulted, so every existing (and legacy-imported) transaction is left with "no
+// receipt" - non-destructive, does not touch any existing row's other data. receipt_pending_deletions
+// is an entirely new, empty-by-default table.
+val MIGRATION_8_9: Migration = object : Migration(8, 9) {
+    override fun migrate(connection: SQLiteConnection) {
+        connection.execSQL("ALTER TABLE `transactions` ADD COLUMN `receiptId` TEXT")
+        connection.execSQL("ALTER TABLE `transactions` ADD COLUMN `receiptStoragePath` TEXT")
+        connection.execSQL("ALTER TABLE `transactions` ADD COLUMN `receiptLocalUri` TEXT")
+        connection.execSQL("ALTER TABLE `transactions` ADD COLUMN `receiptMimeType` TEXT")
+        connection.execSQL("ALTER TABLE `transactions` ADD COLUMN `receiptUpdatedAt` INTEGER")
+        connection.execSQL("ALTER TABLE `transactions` ADD COLUMN `receiptUploadPending` INTEGER NOT NULL DEFAULT 0")
+
+        connection.execSQL(
+            "CREATE TABLE IF NOT EXISTS `receipt_pending_deletions` (" +
+                "`id` INTEGER PRIMARY KEY AUTOINCREMENT NOT NULL, " +
+                "`storagePath` TEXT NOT NULL, " +
+                "`createdAt` INTEGER NOT NULL)"
+        )
+    }
+}
+
 // Explicit, stable seed data for the built-in categories. Intentionally not derived from
 // TransactionCategory, since that enum may change independently of this historical migration.
 internal data class BuiltInCategorySeed(

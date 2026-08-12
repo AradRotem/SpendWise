@@ -24,5 +24,16 @@ data class AddTransactionUiState(
     // scheduledYearMonth, and save routes through RecurringOccurrenceManager instead of a plain
     // transaction update so the recurring-link fields are preserved.
     val isGeneratedOccurrence: Boolean = false,
-    val scheduledYearMonth: String? = null
-)
+    val scheduledYearMonth: String? = null,
+    // Step 18: at most one receipt. receiptLocalPath is preferred for display when present
+    // (instant, works offline); receiptRemoteUrl is only populated when this device has no local
+    // cache of the receipt (e.g. pulled from another device) and a Storage download URL was
+    // resolved instead - see AddTransactionViewModel.
+    val receiptLocalPath: String? = null,
+    val receiptStoragePath: String? = null,
+    val receiptRemoteUrl: String? = null,
+    val isReceiptBusy: Boolean = false,
+    val receiptError: String? = null
+) {
+    val hasReceipt: Boolean get() = receiptLocalPath != null || receiptStoragePath != null
+}

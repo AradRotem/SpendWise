@@ -39,5 +39,26 @@ data class TransactionEntity(
     // RecurringOccurrenceManager.editOccurrenceOnly). A bulk "edit this and future" update never
     // touches rows with this set, so a deliberate per-occurrence override always sticks.
     @ColumnInfo(defaultValue = "0")
-    val isOccurrenceModified: Boolean = false
+    val isOccurrenceModified: Boolean = false,
+
+    // Step 18: at most one receipt image per transaction. All nullable/defaulted so every
+    // pre-Step-18 and legacy-imported transaction defaults to "no receipt" with no migration
+    // needed beyond adding these columns - see ReceiptRepository for how they're populated.
+    // Stable cross-device id for the receipt (also the Storage object's folder segment - see
+    // FirebaseReceiptStorageRepository). Independent of this row's local Room id.
+    val receiptId: String? = null,
+    // Durable Firebase Storage object path, e.g. "users/{uid}/receipts/{receiptId}/{fileName}".
+    // Null until the image has actually finished uploading - see receiptUploadPending.
+    val receiptStoragePath: String? = null,
+    // App-private cached file URI (content:// via FileProvider or a plain file path) so the
+    // receipt remains viewable offline immediately after being attached, before/without a
+    // successful upload.
+    val receiptLocalUri: String? = null,
+    val receiptMimeType: String? = null,
+    val receiptUpdatedAt: Long? = null,
+    // True from the moment a receipt is attached/replaced until its upload to Storage is
+    // confirmed successful. Retried at the same trigger points as Firestore sync - see
+    // ReceiptRepository.retryPendingUploads.
+    @ColumnInfo(defaultValue = "0")
+    val receiptUploadPending: Boolean = false
 )

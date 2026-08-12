@@ -42,6 +42,9 @@ class FakeTransactionDao : TransactionDao {
 
     override suspend fun getById(id: Long): TransactionEntity? = rows.firstOrNull { it.id == id }
 
+    override suspend fun getPendingReceiptUploads(): List<TransactionEntity> =
+        rows.filter { it.receiptUploadPending && it.receiptLocalUri != null }
+
     override suspend fun countByCategoryAndType(categoryName: String, type: TransactionType): Int =
         rows.count { it.category == categoryName && it.type == type }
 

@@ -25,7 +25,16 @@ fun TransactionRow(transaction: TransactionEntity, modifier: Modifier = Modifier
         horizontalArrangement = Arrangement.SpaceBetween
     ) {
         Column(modifier = Modifier.weight(1f)) {
-            Text(text = transactionPrimaryText(transaction), style = MaterialTheme.typography.bodyLarge)
+            Row {
+                Text(text = transactionPrimaryText(transaction), style = MaterialTheme.typography.bodyLarge)
+                if (hasReceipt(transaction)) {
+                    Text(
+                        text = " 📎",
+                        style = MaterialTheme.typography.bodyLarge,
+                        modifier = Modifier.padding(start = 2.dp)
+                    )
+                }
+            }
             transactionSecondaryText(transaction)?.let {
                 Text(text = it, style = MaterialTheme.typography.bodySmall)
             }
@@ -51,6 +60,9 @@ fun TransactionRow(transaction: TransactionEntity, modifier: Modifier = Modifier
 // non-blank (see TransactionEntity.sourceTitle - never re-read from the live plan, so a later
 // rename/delete never changes historical rows), otherwise the category. Extracted as a pure,
 // Compose-free function so this fallback is directly unit-testable.
+fun hasReceipt(transaction: TransactionEntity): Boolean =
+    transaction.receiptLocalUri != null || transaction.receiptStoragePath != null
+
 fun transactionPrimaryText(transaction: TransactionEntity): String =
     transaction.sourceTitle
         ?.takeIf { it.isNotBlank() }

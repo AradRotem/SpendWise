@@ -1,11 +1,16 @@
 package com.aradrotem.spendwise.ui.screens
 
+import android.net.Uri
+import androidx.activity.compose.rememberLauncherForActivityResult
+import androidx.activity.result.PickVisualMediaRequest
+import androidx.activity.result.contract.ActivityResultContracts
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
+import androidx.compose.foundation.layout.height
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.rememberScrollState
@@ -14,6 +19,7 @@ import androidx.compose.foundation.verticalScroll
 import androidx.compose.material3.Button
 import androidx.compose.material3.CircularProgressIndicator
 import androidx.compose.material3.ExperimentalMaterial3Api
+import androidx.compose.material3.HorizontalDivider
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.OutlinedButton
 import androidx.compose.material3.OutlinedTextField
@@ -24,17 +30,27 @@ import androidx.compose.material3.TopAppBar
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.getValue
+import androidx.compose.runtime.mutableStateOf
+import androidx.compose.runtime.remember
+import androidx.compose.runtime.rememberCoroutineScope
+import androidx.compose.runtime.setValue
 import androidx.lifecycle.compose.collectAsStateWithLifecycle
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
+import androidx.compose.ui.layout.ContentScale
 import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.text.input.KeyboardType
 import androidx.compose.ui.unit.dp
+import androidx.core.content.FileProvider
 import androidx.lifecycle.viewmodel.compose.viewModel
+import coil3.compose.AsyncImage
 import com.aradrotem.spendwise.SpendWiseApplication
 import com.aradrotem.spendwise.data.local.TransactionType
+import com.aradrotem.spendwise.data.receipt.ReceiptImageProcessor
 import com.aradrotem.spendwise.ui.components.CategoryDropdownField
 import com.aradrotem.spendwise.ui.components.DateField
+import kotlinx.coroutines.launch
+import java.io.File
 
 @OptIn(ExperimentalMaterial3Api::class)
 @Composable
@@ -43,18 +59,42 @@ fun AddTransactionScreen(
     onSaveSuccess: () -> Unit,
     onBack: () -> Unit,
     modifier: Modifier = Modifier,
+    onViewReceipt: (Long) -> Unit = {},
+    app: SpendWiseApplication = LocalContext.current.applicationContext as SpendWiseApplication,
     viewModel: AddTransactionViewModel = viewModel(
         factory = AddTransactionViewModel.factory(
-            (LocalContext.current.applicationContext as SpendWiseApplication).repositories.transactionRepository,
-            (LocalContext.current.applicationContext as SpendWiseApplication).repositories.categoryRepository,
-            (LocalContext.current.applicationContext as SpendWiseApplication).repositories.recurringOccurrenceManager,
-            transactionId
+            app.repositories.transactionRepository,
+            app.repositories.categoryRepository,
+            app.repositories.recurringOccurrenceManager,
+            transactionId,
+            app.repositories.receiptRepository
         )
     )
 ) {
     val uiState by viewModel.uiState.collectAsStateWithLifecycle()
     val availableCategories by viewModel.availableCategories.collectAsStateWithLifecycle()
     val isEditMode = transactionId != null
+
+    val context = LocalContext.current
+    val coroutineScope = rememberCoroutineScope()
+    val receiptImageProcessor = remember { ReceiptImageProcessor(context.applicationContext) }
+    var pendingCameraUri by remember { mutableStateOf<Uri?>(null) }
+
+    fun processPickedImage(uri: Uri) {
+        coroutineScope.launch {
+            receiptImageProcessor.process(uri)
+                .onSuccess { processed -> viewModel.onReceiptImageProcessed(processed) }
+                .onFailure { error -> viewModel.onReceiptProcessingFailed(error.message ?: "Could not read this image. Try a different one.") }
+        }
+    }
+
+    val cameraLauncher = rememberLauncherForActivityResult(ActivityResultContracts.TakePicture()) { success ->
+        val uri = pendingCameraUri
+        if (success && uri != null) processPickedImage(uri)
+    }
+    val galleryLauncher = rememberLauncherForActivityResult(ActivityResultContracts.PickVisualMedia()) { uri ->
+        if (uri != null) processPickedImage(uri)
+    }
 
     LaunchedEffect(uiState.isSaved) {
         if (uiState.isSaved) {
@@ -178,6 +218,22 @@ fun AddTransactionScreen(
                 modifier = Modifier.fillMaxWidth()
             )
 
+            HorizontalDivider()
+            ReceiptSection(
+                uiState = uiState,
+                onTakePhoto = {
+                    val uri = createReceiptCaptureUri(context)
+                    pendingCameraUri = uri
+                    cameraLauncher.launch(uri)
+                },
+                onChooseFromGallery = {
+                    galleryLauncher.launch(PickVisualMediaRequest(ActivityResultContracts.PickVisualMedia.ImageOnly))
+                },
+                onView = { transactionId?.let(onViewReceipt) },
+                onRemove = viewModel::onRemoveReceipt,
+                onDismissError = viewModel::dismissReceiptError
+            )
+
             uiState.saveError?.let { error ->
                 Text(error, color = MaterialTheme.colorScheme.error)
             }
@@ -195,4 +251,65 @@ fun AddTransactionScreen(
             }
         }
     }
+}
+
+@Composable
+private fun ReceiptSection(
+    uiState: AddTransactionUiState,
+    onTakePhoto: () -> Unit,
+    onChooseFromGallery: () -> Unit,
+    onView: () -> Unit,
+    onRemove: () -> Unit,
+    onDismissError: () -> Unit,
+    modifier: Modifier = Modifier
+) {
+    Column(modifier = modifier.fillMaxWidth(), verticalArrangement = Arrangement.spacedBy(8.dp)) {
+        Text("Receipt", style = MaterialTheme.typography.titleMedium)
+
+        if (uiState.hasReceipt) {
+            AsyncImage(
+                model = uiState.receiptLocalPath?.let { File(it) } ?: uiState.receiptRemoteUrl,
+                contentDescription = "Receipt thumbnail",
+                contentScale = ContentScale.Crop,
+                modifier = Modifier
+                    .fillMaxWidth()
+                    .height(160.dp)
+            )
+            Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
+                OutlinedButton(onClick = onView, enabled = !uiState.isReceiptBusy) { Text("View") }
+                OutlinedButton(onClick = onTakePhoto, enabled = !uiState.isReceiptBusy) { Text("Replace") }
+                OutlinedButton(onClick = onRemove, enabled = !uiState.isReceiptBusy) {
+                    Text("Remove", color = MaterialTheme.colorScheme.error)
+                }
+            }
+        } else {
+            Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
+                OutlinedButton(onClick = onTakePhoto, enabled = !uiState.isReceiptBusy) { Text("Take photo") }
+                OutlinedButton(onClick = onChooseFromGallery, enabled = !uiState.isReceiptBusy) { Text("Choose image") }
+            }
+        }
+
+        if (uiState.isReceiptBusy) {
+            Row(verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(8.dp)) {
+                CircularProgressIndicator(modifier = Modifier.size(16.dp), strokeWidth = 2.dp)
+                Text("Uploading receipt…", style = MaterialTheme.typography.bodySmall)
+            }
+        }
+
+        uiState.receiptError?.let { error ->
+            Row(horizontalArrangement = Arrangement.spacedBy(8.dp), verticalAlignment = Alignment.CenterVertically) {
+                Text(error, color = MaterialTheme.colorScheme.error, style = MaterialTheme.typography.bodySmall, modifier = Modifier.weight(1f))
+                TextButton(onClick = onDismissError) { Text("Dismiss") }
+            }
+        }
+    }
+}
+
+// A fresh app-private file exposed only via FileProvider (see res/xml/file_paths.xml), handed to
+// the system Camera app as the destination for a full-resolution capture - never a raw file://
+// Uri, and never any broader storage access.
+private fun createReceiptCaptureUri(context: android.content.Context): Uri {
+    val receiptsDir = File(context.cacheDir, "receipts").apply { mkdirs() }
+    val captureFile = File(receiptsDir, "capture_${System.currentTimeMillis()}.jpg")
+    return FileProvider.getUriForFile(context, "${context.packageName}.fileprovider", captureFile)
 }

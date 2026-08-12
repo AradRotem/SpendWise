@@ -11,6 +11,7 @@ private val ROUTES_WITHOUT_BOTTOM_BAR = setOf(
     Screen.Account.route,
     Screen.AddTransaction.route,
     Screen.EditTransaction.route,
+    Screen.ReceiptViewer.route,
     Screen.Categories.route,
     Screen.AddRecurringPayment.route,
     Screen.EditRecurringPayment.route,

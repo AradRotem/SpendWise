@@ -10,6 +10,9 @@ import com.aradrotem.spendwise.data.auth.FirebaseUnavailableUserProfileRepositor
 import com.aradrotem.spendwise.data.auth.FirestoreUserProfileRepository
 import com.aradrotem.spendwise.data.auth.UserProfileRepository
 import com.aradrotem.spendwise.data.local.SpendWiseDatabase
+import com.aradrotem.spendwise.data.receipt.FirebaseReceiptStorageRepository
+import com.aradrotem.spendwise.data.receipt.FirebaseUnavailableReceiptStorageRepository
+import com.aradrotem.spendwise.data.receipt.ReceiptStorageRepository
 import com.aradrotem.spendwise.data.sync.ConnectivityObserver
 import com.aradrotem.spendwise.data.sync.FirebaseFirestoreSyncClient
 import com.aradrotem.spendwise.data.sync.LegacyImportManager
@@ -30,11 +33,13 @@ import com.google.firebase.firestore.FirebaseFirestore
 import com.aradrotem.spendwise.data.repository.BudgetRepository
 import com.aradrotem.spendwise.data.repository.CategoryRepository
 import com.aradrotem.spendwise.data.repository.GroupExpenseRepository
+import com.aradrotem.spendwise.data.repository.ReceiptRepository
 import com.aradrotem.spendwise.data.repository.RecurringOccurrenceExceptionRepository
 import com.aradrotem.spendwise.data.repository.RecurringPaymentRepository
 import com.aradrotem.spendwise.data.repository.TransactionRepository
 import com.aradrotem.spendwise.domain.RecurringOccurrenceManager
 import com.aradrotem.spendwise.domain.RecurringPaymentGenerator
+import com.google.firebase.storage.FirebaseStorage
 import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.SupervisorJob
@@ -48,7 +53,8 @@ import kotlinx.coroutines.launch
 class RepositoryBundle(database: SpendWiseDatabase, context: android.content.Context, uid: String?) {
     private val syncMetadataDao = database.syncMetadataDao()
 
-    val transactionRepository: TransactionRepository = TransactionRepository(database.transactionDao(), syncMetadataDao)
+    val transactionRepository: TransactionRepository =
+        TransactionRepository(database.transactionDao(), syncMetadataDao, database.receiptPendingDeletionDao())
     val categoryRepository: CategoryRepository = CategoryRepository(database.categoryDao(), syncMetadataDao)
     val budgetRepository: BudgetRepository = BudgetRepository(database.budgetDao(), syncMetadataDao)
     val recurringPaymentRepository: RecurringPaymentRepository =
@@ -85,6 +91,23 @@ class RepositoryBundle(database: SpendWiseDatabase, context: android.content.Con
             firestoreClient = FirebaseFirestoreSyncClient(FirebaseFirestore.getInstance()),
             watermarkStore = SharedPrefsSyncWatermarkStore(context, uid)
         )
+    } else {
+        null
+    }
+
+    // Independent of whether Firebase is configured (see FirebaseAvailability) - the fallback
+    // makes uploads fail with a clear error rather than crashing, so a receipt can still be
+    // attached and viewed locally even in a build/dev environment without Storage set up.
+    val receiptStorageRepository: ReceiptStorageRepository = if (FirebaseAvailability.isConfigured(context)) {
+        FirebaseReceiptStorageRepository(FirebaseStorage.getInstance())
+    } else {
+        FirebaseUnavailableReceiptStorageRepository()
+    }
+
+    // Null for the legacy/pre-auth database - receipts always belong to an authenticated user
+    // (see Step 18 plan), same nullability rule as syncEngine above.
+    val receiptRepository: ReceiptRepository? = if (uid != null) {
+        ReceiptRepository(transactionRepository, receiptStorageRepository, database.receiptPendingDeletionDao(), uid)
     } else {
         null
     }
@@ -149,12 +172,18 @@ class SpendWiseApplication : Application() {
         }
     }
 
-    // Safe to call whenever - a no-op if the active account has no sync engine (legacy database,
-    // or Firebase not configured for this build). Used by MainActivity.onResume, connectivity
-    // regained, and the manual "Sync now" action in Account settings.
+    // Safe to call whenever - each part no-ops if the active account has no sync engine/receipt
+    // repository (legacy database). Used by MainActivity.onResume, connectivity regained, and the
+    // manual "Sync now" action in Account settings - the same trigger points cover both Firestore
+    // sync and any receipts left pending from an offline attach/replace/remove/delete.
     fun triggerSync() {
-        val engine = repositories.syncEngine ?: return
-        applicationScope.launch { engine.sync() }
+        repositories.syncEngine?.let { engine -> applicationScope.launch { engine.sync() } }
+        repositories.receiptRepository?.let { receipts ->
+            applicationScope.launch {
+                receipts.retryPendingUploads()
+                receipts.retryPendingDeletions()
+            }
+        }
     }
 
     // Rebuilds the repository bundle from the database for [uid] (null = legacy/no-account

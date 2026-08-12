@@ -43,6 +43,11 @@ interface TransactionDao {
     @Query("SELECT * FROM transactions WHERE id = :id")
     suspend fun getById(id: Long): TransactionEntity?
 
+    // Receipts attached/replaced while offline (or whose upload otherwise failed) - retried at
+    // the same trigger points as Firestore sync. See ReceiptRepository.retryPendingUploads.
+    @Query("SELECT * FROM transactions WHERE receiptUploadPending = 1 AND receiptLocalUri IS NOT NULL")
+    suspend fun getPendingReceiptUploads(): List<TransactionEntity>
+
     @Query("SELECT COUNT(*) FROM transactions WHERE category = :categoryName AND type = :type")
     suspend fun countByCategoryAndType(categoryName: String, type: TransactionType): Int
 

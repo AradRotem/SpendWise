@@ -1,6 +1,8 @@
 package com.aradrotem.spendwise.data.repository
 
 import com.aradrotem.spendwise.data.local.CategoryMonthlyTotal
+import com.aradrotem.spendwise.data.local.ReceiptPendingDeletionDao
+import com.aradrotem.spendwise.data.local.ReceiptPendingDeletionEntity
 import com.aradrotem.spendwise.data.local.TransactionDao
 import com.aradrotem.spendwise.data.local.TransactionEntity
 import com.aradrotem.spendwise.data.local.TransactionType
@@ -11,7 +13,8 @@ import kotlinx.coroutines.flow.Flow
 
 class TransactionRepository(
     private val transactionDao: TransactionDao,
-    syncMetadataDao: SyncMetadataDao? = null
+    syncMetadataDao: SyncMetadataDao? = null,
+    private val receiptPendingDeletionDao: ReceiptPendingDeletionDao? = null
 ) {
     private val syncStamper = SyncStamper(syncMetadataDao, SyncEntityType.TRANSACTION)
 
@@ -33,6 +36,8 @@ class TransactionRepository(
 
     suspend fun getById(id: Long): TransactionEntity? = transactionDao.getById(id)
 
+    suspend fun getPendingReceiptUploads(): List<TransactionEntity> = transactionDao.getPendingReceiptUploads()
+
     suspend fun countByCategoryAndType(categoryName: String, type: TransactionType): Int =
         transactionDao.countByCategoryAndType(categoryName, type)
 
@@ -50,6 +55,13 @@ class TransactionRepository(
     suspend fun delete(transaction: TransactionEntity) {
         transactionDao.delete(transaction)
         syncStamper.markDeleted(transaction.id)
+        // Queued rather than deleted from Storage synchronously here, so a transaction delete
+        // never depends on network/Storage availability - retried at the same trigger points as
+        // Firestore sync (see ReceiptRepository.retryPendingDeletions), including after an
+        // offline delete.
+        transaction.receiptStoragePath?.let { storagePath ->
+            receiptPendingDeletionDao?.insert(ReceiptPendingDeletionEntity(storagePath = storagePath))
+        }
     }
 
     fun observeByPlan(planId: Long): Flow<List<TransactionEntity>> = transactionDao.observeByPlan(planId)

@@ -35,6 +35,7 @@ import com.aradrotem.spendwise.ui.screens.GroupExpensesListScreen
 import com.aradrotem.spendwise.ui.screens.GroupFormScreen
 import com.aradrotem.spendwise.ui.screens.GroupSettlementScreen
 import com.aradrotem.spendwise.ui.screens.HomeScreen
+import com.aradrotem.spendwise.ui.screens.ReceiptViewerScreen
 import com.aradrotem.spendwise.ui.screens.RecurringPaymentsScreen
 import com.aradrotem.spendwise.ui.screens.ReportsAnalyticsScreen
 import com.aradrotem.spendwise.ui.screens.SettingsScreen
@@ -212,6 +213,17 @@ fun SpendWiseApp() {
                 AddTransactionScreen(
                     transactionId = transactionId,
                     onSaveSuccess = { navController.popBackStack() },
+                    onBack = { navController.popBackStack() },
+                    onViewReceipt = { id -> navController.navigate(Screen.ReceiptViewer.createRoute(id)) { launchSingleTop = true } }
+                )
+            }
+            composable(
+                route = Screen.ReceiptViewer.route,
+                arguments = listOf(navArgument("transactionId") { type = NavType.LongType })
+            ) { backStackEntry ->
+                val transactionId = backStackEntry.arguments?.getLong("transactionId") ?: return@composable
+                ReceiptViewerScreen(
+                    transactionId = transactionId,
                     onBack = { navController.popBackStack() }
                 )
             }

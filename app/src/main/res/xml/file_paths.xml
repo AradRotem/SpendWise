@@ -1,0 +1,7 @@
+<?xml version="1.0" encoding="utf-8"?>
+<!-- Exposes only the app-private receipts cache directory via FileProvider, for handing a safe
+     content:// URI to the system Camera app to write a full-resolution capture into. Nothing else
+     under the app's storage is exposed. -->
+<paths xmlns:android="http://schemas.android.com/apk/res/android">
+    <cache-path name="receipts" path="receipts/" />
+</paths>
