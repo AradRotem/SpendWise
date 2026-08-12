@@ -1,5 +1,6 @@
 package com.aradrotem.spendwise.data.auth
 
+import android.util.Log
 import com.google.firebase.FirebaseNetworkException
 import com.google.firebase.auth.FirebaseAuth
 import com.google.firebase.auth.FirebaseAuthInvalidCredentialsException
@@ -40,10 +41,20 @@ class FirebaseAuthRepository(private val firebaseAuth: FirebaseAuth) : AuthRepos
             firebaseAuth.signInWithEmailAndPassword(email, password).await()
         }
 
-    override suspend fun sendPasswordReset(email: String): Result<Unit> =
-        runAuthCatching {
+    // Firebase does not reveal whether `email` belongs to an existing account - the call succeeds
+    // either way (and simply sends no email if there's no matching account), by design, to prevent
+    // account enumeration. A "success" result here only means the request was accepted by
+    // Firebase, not that an email was necessarily delivered - see ForgotPasswordScreen's wording.
+    override suspend fun sendPasswordReset(email: String): Result<Unit> {
+        Log.d(TAG, "Password reset requested")
+        val result = runAuthCatching {
             firebaseAuth.sendPasswordResetEmail(email).await()
         }
+        result
+            .onSuccess { Log.d(TAG, "Password reset request accepted by Firebase") }
+            .onFailure { error -> Log.w(TAG, "Password reset request failed: ${error::class.simpleName}") }
+        return result
+    }
 
     override suspend fun logout() {
         firebaseAuth.signOut()
@@ -72,4 +83,8 @@ class FirebaseAuthRepository(private val firebaseAuth: FirebaseAuth) : AuthRepos
 
     private fun com.google.firebase.auth.FirebaseUser.toAuthUser() =
         AuthUser(uid = uid, email = email, displayName = displayName)
+
+    companion object {
+        private const val TAG = "SpendWiseAuth"
+    }
 }

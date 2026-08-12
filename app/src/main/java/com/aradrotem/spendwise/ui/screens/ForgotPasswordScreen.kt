@@ -50,8 +50,11 @@ fun ForgotPasswordScreen(
             verticalArrangement = Arrangement.spacedBy(16.dp)
         ) {
             if (uiState.isEmailSent) {
+                // Deliberately shown identically whether or not an account exists for this email -
+                // Firebase itself doesn't tell the app which case occurred (see
+                // FirebaseAuthRepository.sendPasswordReset), so this text must not imply either way.
                 Text(
-                    "If an account exists for that email, a password reset link has been sent.",
+                    "Password reset email sent. Check your inbox and spam folder.",
                     style = MaterialTheme.typography.bodyMedium
                 )
             } else {
