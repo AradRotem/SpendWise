@@ -95,4 +95,37 @@ class TransactionRowDisplayTest {
         )
         assertNull(transactionSecondaryText(manual))
     }
+
+    // --- hasReceipt: must recognize a receipt synced in from another device, not just a local file ---
+
+    private fun manualTransaction(receiptLocalUri: String? = null, receiptStoragePath: String? = null) = TransactionEntity(
+        amountInCents = 500L, type = TransactionType.EXPENSE, category = "FOOD", timestamp = 1_000L,
+        receiptLocalUri = receiptLocalUri, receiptStoragePath = receiptStoragePath
+    )
+
+    @Test
+    fun hasReceipt_falseWhenNeitherLocalNorRemoteReceiptReferenceIsSet() {
+        assertEquals(false, hasReceipt(manualTransaction()))
+    }
+
+    @Test
+    fun hasReceipt_trueForLocalOnlyReceipt() {
+        assertEquals(true, hasReceipt(manualTransaction(receiptLocalUri = "/cache/receipts/r1.jpg")))
+    }
+
+    // A receipt pulled in via Firestore sync from another device may have a durable Storage path
+    // but no local cache yet - it must still count as "has a receipt" so View receipt/the paperclip
+    // indicator appear and the viewer can resolve it via download URL.
+    @Test
+    fun hasReceipt_trueForRemoteOnlyReceipt_withNoLocalCache() {
+        assertEquals(true, hasReceipt(manualTransaction(receiptStoragePath = "users/uid/receipts/r1/receipt.jpg")))
+    }
+
+    @Test
+    fun hasReceipt_trueWhenBothLocalAndRemoteReferencesArePresent() {
+        assertEquals(
+            true,
+            hasReceipt(manualTransaction(receiptLocalUri = "/cache/receipts/r1.jpg", receiptStoragePath = "users/uid/receipts/r1/receipt.jpg"))
+        )
+    }
 }

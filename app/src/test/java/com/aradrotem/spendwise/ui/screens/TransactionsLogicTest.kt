@@ -291,4 +291,46 @@ class TransactionsLogicTest {
             WARNING_EDIT_INSTALLMENT_OCCURRENCE
         )
     }
+
+    // --- receiptClickHandler: routes the receipt indicator's tap to the correct transaction --------
+    // (TransactionActionDialog's "View receipt" button gating is driven by this same hasReceipt()
+    // check - see TransactionsScreen - so these tests also cover "shows/hides View receipt".)
+
+    @Test
+    fun receiptClickHandler_returnsNull_whenTransactionHasNoReceipt() {
+        val transaction = manualTransaction()
+
+        val handler = receiptClickHandler(transaction) { }
+
+        assertEquals(null, handler)
+    }
+
+    @Test
+    fun receiptClickHandler_invokesOnViewReceiptWithTransactionId_forLocalReceipt() {
+        val transaction = manualTransaction().copy(id = 7L, receiptLocalUri = "/cache/receipts/r1.jpg")
+        val viewedIds = mutableListOf<Long>()
+
+        receiptClickHandler(transaction) { viewedIds.add(it) }?.invoke()
+
+        assertEquals(listOf(7L), viewedIds)
+    }
+
+    // Same routing must work for a receipt synced in from another device, where only the Storage
+    // path is known locally (no cached file yet) - see hasReceipt.
+    @Test
+    fun receiptClickHandler_invokesOnViewReceiptWithTransactionId_forRemoteOnlyReceipt() {
+        val transaction = manualTransaction().copy(id = 9L, receiptStoragePath = "users/uid/receipts/r1/receipt.jpg")
+        val viewedIds = mutableListOf<Long>()
+
+        receiptClickHandler(transaction) { viewedIds.add(it) }?.invoke()
+
+        assertEquals(listOf(9L), viewedIds)
+    }
+
+    @Test
+    fun viewReceiptLabel_isNotBlankAndDistinctFromEditAndDelete() {
+        assertTrue(LABEL_VIEW_RECEIPT.isNotBlank())
+        assertFalse(LABEL_VIEW_RECEIPT.equals("Edit", ignoreCase = true))
+        assertFalse(LABEL_VIEW_RECEIPT.equals("Delete", ignoreCase = true))
+    }
 }

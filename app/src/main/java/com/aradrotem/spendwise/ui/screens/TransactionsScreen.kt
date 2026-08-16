@@ -34,11 +34,23 @@ import com.aradrotem.spendwise.R
 import com.aradrotem.spendwise.SpendWiseApplication
 import com.aradrotem.spendwise.data.local.TransactionEntity
 import com.aradrotem.spendwise.ui.components.TransactionRow
+import com.aradrotem.spendwise.ui.components.hasReceipt
 import kotlinx.coroutines.launch
 
 // A generated transaction and its resolved action-menu info, always set together (see
 // openGeneratedActionMenu) so the two can never be observed independently/out of sync.
 private data class GeneratedActionMenuState(val transaction: TransactionEntity, val info: GeneratedTransactionActionInfo)
+
+// Routes a tap on a transaction row's receipt indicator to onViewReceipt(transaction.id) - or, for
+// a transaction with no receipt, to nothing at all (TransactionRow renders no clickable indicator
+// when this is null - see hasReceipt). Extracted as a plain top-level function (not inlined at the
+// call site) so this routing is directly unit-testable without Compose.
+fun receiptClickHandler(transaction: TransactionEntity, onViewReceipt: (Long) -> Unit): (() -> Unit)? =
+    if (hasReceipt(transaction)) {
+        { onViewReceipt(transaction.id) }
+    } else {
+        null
+    }
 
 @OptIn(ExperimentalFoundationApi::class)
 @Composable
@@ -46,6 +58,7 @@ fun TransactionsScreen(
     onEditTransaction: (Long) -> Unit,
     onEditThisAndFuture: (planId: Long, transactionId: Long) -> Unit,
     onOpenRecurringPlan: (planId: Long) -> Unit,
+    onViewReceipt: (Long) -> Unit,
     modifier: Modifier = Modifier,
     viewModel: TransactionsViewModel = viewModel(
         factory = TransactionsViewModel.factory(
@@ -114,7 +127,8 @@ fun TransactionsScreen(
                                             actionTransaction = transaction
                                         }
                                     }
-                                )
+                                ),
+                                onReceiptClick = receiptClickHandler(transaction, onViewReceipt)
                             )
                             HorizontalDivider()
                         }
@@ -126,6 +140,11 @@ fun TransactionsScreen(
 
     actionTransaction?.let { transaction ->
         TransactionActionDialog(
+            hasReceipt = hasReceipt(transaction),
+            onViewReceipt = {
+                actionTransaction = null
+                onViewReceipt(transaction.id)
+            },
             onEdit = {
                 actionTransaction = null
                 onEditTransaction(transaction.id)
@@ -241,6 +260,8 @@ fun TransactionsScreen(
 
 @Composable
 private fun TransactionActionDialog(
+    hasReceipt: Boolean,
+    onViewReceipt: () -> Unit,
     onEdit: () -> Unit,
     onDelete: () -> Unit,
     onCancel: () -> Unit
@@ -259,6 +280,11 @@ private fun TransactionActionDialog(
                 modifier = Modifier.fillMaxWidth(),
                 verticalArrangement = Arrangement.spacedBy(4.dp)
             ) {
+                if (hasReceipt) {
+                    TextButton(onClick = onViewReceipt, modifier = Modifier.fillMaxWidth()) {
+                        Text(LABEL_VIEW_RECEIPT)
+                    }
+                }
                 TextButton(onClick = onEdit, modifier = Modifier.fillMaxWidth()) {
                     Text(stringResource(R.string.action_edit))
                 }
@@ -301,6 +327,7 @@ private fun DeleteConfirmationDialog(
 // same text the dialogs below show, without needing Compose UI testing. SpendWise only tracks
 // transactions - it never talks to a bank, card provider, or merchant - so none of this wording
 // may imply that editing or removing a record cancels a real external charge.
+const val LABEL_VIEW_RECEIPT = "View receipt"
 const val LABEL_MANAGE_INSTALLMENT_PLAN = "Manage installment plan"
 const val LABEL_ADVANCED_OCCURRENCE_ACTIONS = "Advanced occurrence actions"
 // Shown in place of "Manage installment plan" when the source plan can no longer be found (e.g.

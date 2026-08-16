@@ -147,7 +147,8 @@ fun SpendWiseApp() {
                     },
                     onOpenRecurringPlan = { planId ->
                         navController.navigate(Screen.EditRecurringPayment.createRoute(planId)) { launchSingleTop = true }
-                    }
+                    },
+                    onViewReceipt = { id -> navController.navigate(Screen.ReceiptViewer.createRoute(id)) { launchSingleTop = true } }
                 )
             }
             composable(Screen.Budgets.route) { BudgetsScreen() }
