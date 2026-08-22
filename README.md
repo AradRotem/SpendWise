@@ -36,6 +36,33 @@ The application allows users to record transactions, organize them by category, 
 * Personalized financial insights
 * Dark mode support
 
+## Future Roadmap (Postponed Features)
+
+The following features were part of the original SpendWise concept but are intentionally postponed and are **not** part of the current development scope. They are documented here for future reference only.
+
+### 1. Multi-Currency Support
+
+A future feature for recording and analyzing transactions in multiple currencies. Possible future functionality may include:
+
+* Selecting a currency for a transaction
+* Retrieving exchange rates from an external currency/exchange-rate API
+* Converting transactions into the user's main/default currency
+* Showing converted totals in reports and analytics
+* Supporting shared-group expenses involving different currencies
+
+### 2. Receipt Item Extraction & Price Tracking
+
+SpendWise currently supports attaching, storing, and viewing receipt images for a transaction — this part is **already implemented**.
+
+Not yet implemented, and planned only for a later stage, is a more advanced version of receipt handling that could include:
+
+* OCR / automatic receipt parsing
+* Detecting individual products/items from a receipt
+* Extracting details such as product name, quantity (when available), individual price, store/business, and purchase date
+* Storing receipt items in a structured form associated with the original transaction
+
+**Product price comparison** is a longer-term goal built on top of this: using historical receipt data to compare prices of the same product across stores and over time (e.g. cheapest store, previous prices paid, price trends, lowest/highest/average recorded price). This would be a personal, historical comparison based on the user's own recorded receipts, not a live supermarket price-comparison service.
+
 ## Technologies
 
 * Kotlin
