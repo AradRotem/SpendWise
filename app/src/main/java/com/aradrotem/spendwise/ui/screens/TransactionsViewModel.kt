@@ -10,8 +10,12 @@ import com.aradrotem.spendwise.data.local.TransactionEntity
 import com.aradrotem.spendwise.data.repository.RecurringPaymentRepository
 import com.aradrotem.spendwise.data.repository.TransactionRepository
 import com.aradrotem.spendwise.domain.RecurringOccurrenceManager
+import java.time.YearMonth
+import kotlinx.coroutines.ExperimentalCoroutinesApi
+import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.SharingStarted
 import kotlinx.coroutines.flow.StateFlow
+import kotlinx.coroutines.flow.flatMapLatest
 import kotlinx.coroutines.flow.map
 import kotlinx.coroutines.flow.stateIn
 import kotlinx.coroutines.launch
@@ -22,13 +26,39 @@ class TransactionsViewModel(
     private val recurringOccurrenceManager: RecurringOccurrenceManager
 ) : ViewModel() {
 
-    val uiState: StateFlow<TransactionsUiState> = transactionRepository.observeAll()
-        .map { transactions -> TransactionsUiState(transactions = transactions, isLoading = false) }
+    private val dateFilter = MutableStateFlow<TransactionDateFilter>(TransactionDateFilter.All)
+
+    // Re-queries Room only when the filter itself changes, reusing the same half-open
+    // observeInRange the rest of the app already uses for date-scoped queries (see MonthRange) -
+    // never loads the whole table into Compose just to filter it there.
+    @OptIn(ExperimentalCoroutinesApi::class)
+    val uiState: StateFlow<TransactionsUiState> = dateFilter
+        .flatMapLatest { filter ->
+            val range = filter.toRange()
+            val transactionsFlow = if (range == null) {
+                transactionRepository.observeAll()
+            } else {
+                transactionRepository.observeInRange(range.startMillis, range.endExclusiveMillis)
+            }
+            transactionsFlow.map { transactions -> TransactionsUiState(transactions = transactions, isLoading = false, dateFilter = filter) }
+        }
         .stateIn(
             scope = viewModelScope,
             started = SharingStarted.WhileSubscribed(5_000),
             initialValue = TransactionsUiState(isLoading = true)
         )
+
+    fun setMonthFilter(yearMonth: YearMonth) {
+        dateFilter.value = TransactionDateFilter.Month(yearMonth)
+    }
+
+    fun setCustomRangeFilter(startMillis: Long, endExclusiveMillis: Long) {
+        dateFilter.value = TransactionDateFilter.CustomRange(startMillis, endExclusiveMillis)
+    }
+
+    fun clearDateFilter() {
+        dateFilter.value = TransactionDateFilter.All
+    }
 
     fun deleteTransaction(transaction: TransactionEntity) {
         viewModelScope.launch {

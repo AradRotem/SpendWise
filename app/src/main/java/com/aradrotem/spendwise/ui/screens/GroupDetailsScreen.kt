@@ -20,11 +20,13 @@ import androidx.compose.material3.DropdownMenuItem
 import androidx.compose.material3.ExperimentalMaterial3Api
 import androidx.compose.material3.ExtendedFloatingActionButton
 import androidx.compose.material3.MaterialTheme
+import androidx.compose.material3.OutlinedTextField
 import androidx.compose.material3.Scaffold
 import androidx.compose.material3.Text
 import androidx.compose.material3.TextButton
 import androidx.compose.material3.TopAppBar
 import androidx.compose.runtime.Composable
+import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.getValue
 import androidx.lifecycle.compose.collectAsStateWithLifecycle
 import androidx.compose.runtime.mutableStateOf
@@ -62,10 +64,31 @@ fun GroupDetailsScreen(
             (LocalContext.current.applicationContext as SpendWiseApplication).repositories.groupExpenseRepository,
             groupId
         )
+    ),
+    app: SpendWiseApplication = LocalContext.current.applicationContext as SpendWiseApplication,
+    sharingViewModel: GroupSharingViewModel = viewModel(
+        factory = GroupSharingViewModel.factory(
+            app.repositories.groupExpenseRepository,
+            app.repositories.groupCloudRepository,
+            groupId,
+            app.authRepository
+        )
     )
 ) {
     val uiState by viewModel.uiState.collectAsStateWithLifecycle()
+    val sharingUiState by sharingViewModel.uiState.collectAsStateWithLifecycle()
     var expensePendingDelete by remember { mutableStateOf<GroupExpenseEntity?>(null) }
+    var showInviteDialog by remember { mutableStateOf(false) }
+
+    // Step 19: refresh just this group on entry - once its groupSyncId is known (the local group
+    // row has loaded), rather than every group like the Groups list screen does. A local-only
+    // group never has a groupSyncId, so this is a no-op for the pre-Step-19 common case.
+    val groupSyncId = uiState.group?.groupSyncId
+    LaunchedEffect(groupSyncId) {
+        if (groupSyncId != null) {
+            app.sharedGroupSyncEngine.syncGroup(groupSyncId, uiState.group?.name ?: "")
+        }
+    }
 
     Scaffold(
         modifier = modifier,
@@ -74,6 +97,11 @@ fun GroupDetailsScreen(
                 title = { Text(uiState.group?.name ?: "Group") },
                 navigationIcon = {
                     TextButton(onClick = onBack) { Text("← Back") }
+                },
+                actions = {
+                    if (app.repositories.groupCloudRepository != null) {
+                        TextButton(onClick = { showInviteDialog = true }) { Text("Invite") }
+                    }
                 }
             )
         },
@@ -131,6 +159,17 @@ fun GroupDetailsScreen(
         }
     }
 
+    if (showInviteDialog) {
+        InviteByEmailDialog(
+            uiState = sharingUiState,
+            onInvite = sharingViewModel::inviteByEmail,
+            onDismiss = {
+                showInviteDialog = false
+                sharingViewModel.dismissMessage()
+            }
+        )
+    }
+
     expensePendingDelete?.let { expense ->
         AlertDialog(
             onDismissRequest = { expensePendingDelete = null },
@@ -147,6 +186,45 @@ fun GroupDetailsScreen(
             }
         )
     }
+}
+
+// Step 19 Part 5: invite a real SpendWise user to this group by email. Upgrading a purely local
+// group to a shared one (if it isn't already) happens transparently inside
+// GroupSharingViewModel.inviteByEmail the first time this is used - nothing here needs to know
+// whether the group was already shared.
+@Composable
+private fun InviteByEmailDialog(uiState: GroupSharingUiState, onInvite: (String) -> Unit, onDismiss: () -> Unit) {
+    var email by remember { mutableStateOf("") }
+
+    AlertDialog(
+        onDismissRequest = onDismiss,
+        title = { Text("Invite by email") },
+        text = {
+            Column(verticalArrangement = Arrangement.spacedBy(8.dp)) {
+                OutlinedTextField(
+                    value = email,
+                    onValueChange = { email = it },
+                    label = { Text("Email address") },
+                    singleLine = true,
+                    modifier = Modifier.fillMaxWidth()
+                )
+                uiState.inviteError?.let { Text(it, color = MaterialTheme.colorScheme.error, style = MaterialTheme.typography.bodySmall) }
+                uiState.inviteSuccessMessage?.let { Text(it, style = MaterialTheme.typography.bodySmall) }
+                if (uiState.sentInvitations.isNotEmpty()) {
+                    Text("Already invited:", style = MaterialTheme.typography.labelMedium)
+                    uiState.sentInvitations.forEach { invitation ->
+                        Text("${invitation.inviteeEmail} — ${invitation.status}", style = MaterialTheme.typography.bodySmall)
+                    }
+                }
+            }
+        },
+        confirmButton = {
+            TextButton(onClick = { onInvite(email) }) { Text("Send invite") }
+        },
+        dismissButton = {
+            TextButton(onClick = onDismiss) { Text(stringResource(R.string.action_cancel)) }
+        }
+    )
 }
 
 @Composable

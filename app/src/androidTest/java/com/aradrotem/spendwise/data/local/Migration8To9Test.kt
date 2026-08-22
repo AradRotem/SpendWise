@@ -68,7 +68,7 @@ class Migration8To9Test {
         legacyDb.close()
 
         val migratedDb = Room.databaseBuilder(context, SpendWiseDatabase::class.java, dbName)
-            .addMigrations(MIGRATION_8_9)
+            .addMigrations(MIGRATION_8_9, MIGRATION_9_10, MIGRATION_10_11, MIGRATION_11_12, MIGRATION_12_13)
             .allowMainThreadQueries()
             .build()
 

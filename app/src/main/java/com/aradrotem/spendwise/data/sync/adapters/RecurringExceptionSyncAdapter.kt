@@ -27,10 +27,16 @@ class RecurringExceptionSyncAdapter(
         )
     }
 
-    override suspend fun applyRemoteUpsert(syncId: String, data: Map<String, Any?>, existingLocalId: Long?): Long {
+    override suspend fun applyRemoteUpsert(syncId: String, data: Map<String, Any?>, existingLocalId: Long?): Long? {
         val recurringPlanSyncId = data["recurringPlanSyncId"] as? String
         val recurringPlanId = resolver.localIdFor(SyncEntityType.RECURRING_PLAN, recurringPlanSyncId)
-        checkNotNull(recurringPlanId) { "Recurring plan for exception $syncId not yet available locally" }
+        // The parent plan hasn't been pulled onto this device yet (a stale/out-of-step watermark,
+        // a same-batch pull ordering hiccup, or - if it never arrives - a genuinely orphaned
+        // remote exception). Deferring here (see EntitySyncAdapter.applyRemoteUpsert) instead of
+        // throwing is what lets the rest of this sync pass - including unrelated entity types and
+        // Step 19's shared-group sync - complete normally rather than the whole sync aborting on
+        // one out-of-order or orphaned row.
+        if (recurringPlanId == null) return null
         if (existingLocalId != null) return existingLocalId // immutable once created; nothing to update
         return dao.insert(
             RecurringOccurrenceExceptionEntity(

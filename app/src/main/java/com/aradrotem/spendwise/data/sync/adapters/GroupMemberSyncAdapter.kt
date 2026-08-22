@@ -24,10 +24,12 @@ class GroupMemberSyncAdapter(
         )
     }
 
-    override suspend fun applyRemoteUpsert(syncId: String, data: Map<String, Any?>, existingLocalId: Long?): Long {
+    override suspend fun applyRemoteUpsert(syncId: String, data: Map<String, Any?>, existingLocalId: Long?): Long? {
         val groupSyncId = data["groupSyncId"] as? String
         val groupId = resolver.localIdFor(SyncEntityType.GROUP, groupSyncId)
-        checkNotNull(groupId) { "Group for member $syncId not yet available locally" }
+        // Defer rather than throw if the parent group isn't locally available yet - see
+        // EntitySyncAdapter.applyRemoteUpsert / RecurringExceptionSyncAdapter for the same pattern.
+        if (groupId == null) return null
         val entity = GroupMemberEntity(
             id = existingLocalId ?: 0,
             groupId = groupId,

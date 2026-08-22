@@ -9,9 +9,13 @@ import com.aradrotem.spendwise.domain.AnalyticsTimeRange
 import com.aradrotem.spendwise.domain.BudgetActualCalculator
 import com.aradrotem.spendwise.domain.CategoryDistributionCalculator
 import com.aradrotem.spendwise.domain.CategoryTrendCalculator
+import com.aradrotem.spendwise.domain.CumulativeSpendingCalculator
 import com.aradrotem.spendwise.domain.FinancialInsightGenerator
+import com.aradrotem.spendwise.domain.MonthEndProjectionCalculator
 import com.aradrotem.spendwise.domain.MonthlyIncomeExpenseCalculator
 import com.aradrotem.spendwise.domain.MonthlySpendingTrendCalculator
+import com.aradrotem.spendwise.domain.TopPayeeCalculator
+import com.aradrotem.spendwise.domain.WeekdaySpendingCalculator
 import com.aradrotem.spendwise.ui.format.formatAmountInCents
 import com.aradrotem.spendwise.ui.format.formatMonthYear
 import com.aradrotem.spendwise.ui.format.formatPercent
@@ -82,6 +86,26 @@ fun buildVisualAnalyticsUiState(
         formatPercent = ::formatPercent
     )
 
+    val weekdaySpending = WeekdaySpendingCalculator.calculate(transactions, zoneId)
+    val topPayees = TopPayeeCalculator.calculate(transactions)
+    // CumulativeSpendingCalculator filters `transactions` down to selectedMonth internally, so the
+    // full period's transaction list can be passed straight through without pre-filtering here.
+    val cumulativeSpending = CumulativeSpendingCalculator.calculate(selectedMonth, transactions, zoneId)
+
+    // A projection only makes sense for the month currently in progress - a past selected month
+    // already has its final total, and a future one has no data to extrapolate from.
+    val monthEndProjection = if (selectedMonth == YearMonth.now(zoneId)) {
+        val totalBudgetCents = budgets.sumOf { it.monthlyLimitCents }.takeIf { budgets.isNotEmpty() }
+        MonthEndProjectionCalculator.calculate(
+            elapsedDays = cumulativeSpending.size,
+            totalDaysInMonth = selectedMonth.lengthOfMonth(),
+            spentSoFarCents = cumulativeSpending.lastOrNull()?.cumulativeExpenseCents ?: 0L,
+            budgetCents = totalBudgetCents
+        )
+    } else {
+        null
+    }
+
     return VisualAnalyticsUiState(
         isLoading = false,
         selectedMonth = selectedMonth,
@@ -101,7 +125,11 @@ fun buildVisualAnalyticsUiState(
         selectedTrendCategory = resolvedTrendCategory,
         categoryTrend = categoryTrend,
         budgetActuals = budgetActuals,
-        insights = insights
+        insights = insights,
+        weekdaySpending = weekdaySpending,
+        topPayees = topPayees,
+        cumulativeSpending = cumulativeSpending,
+        monthEndProjection = monthEndProjection
     )
 }
 

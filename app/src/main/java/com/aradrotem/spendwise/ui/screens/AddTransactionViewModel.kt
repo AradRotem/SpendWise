@@ -9,8 +9,11 @@ import com.aradrotem.spendwise.data.local.TransactionEntity
 import com.aradrotem.spendwise.data.local.TransactionType
 import com.aradrotem.spendwise.data.receipt.ProcessedReceiptImage
 import com.aradrotem.spendwise.data.repository.CategoryRepository
+import com.aradrotem.spendwise.data.repository.ExchangeRateRepository
+import com.aradrotem.spendwise.data.repository.ExchangeRateResult
 import com.aradrotem.spendwise.data.repository.ReceiptRepository
 import com.aradrotem.spendwise.data.repository.TransactionRepository
+import com.aradrotem.spendwise.domain.CurrencyConversion
 import com.aradrotem.spendwise.domain.RecurringOccurrenceManager
 import com.aradrotem.spendwise.ui.components.transactionPrimaryText
 import com.aradrotem.spendwise.ui.format.formatAmountInCents
@@ -39,7 +42,15 @@ class AddTransactionViewModel(
     // Null when receipts aren't available (legacy/no-account database) - the Receipt section
     // still lets the user pick an image for local preview, but attach/replace/remove/upload are
     // no-ops reported as a friendly error, same fallback philosophy as auth/sync.
-    private val receiptRepository: ReceiptRepository? = null
+    private val receiptRepository: ReceiptRepository? = null,
+    // Null only in tests that don't exercise the currency feature - always supplied by the real
+    // factory, since fetching a rate has no auth/account dependency (unlike receipts).
+    private val exchangeRateRepository: ExchangeRateRepository? = null,
+    // The user's preferred/base account currency (see UserProfile.preferredCurrency) - the
+    // currency amountInCents is always expressed in, and the default toCurrency for any
+    // conversion. "USD" mirrors UserProfile's own default so a signed-out/legacy session behaves
+    // the same as a fresh account that hasn't changed its preference yet.
+    private val baseCurrencyCode: String = "USD"
 ) : ViewModel() {
 
     private val _uiState = MutableStateFlow(AddTransactionUiState(isLoading = transactionId != null))
@@ -218,6 +229,62 @@ class AddTransactionViewModel(
         }
     }
 
+    fun onForeignCurrencyToggle(enabled: Boolean) {
+        _uiState.update { it.copy(useForeignCurrency = enabled, rateError = null) }
+        if (enabled) fetchRate()
+    }
+
+    fun onForeignCurrencyCodeChange(code: String) {
+        _uiState.update { it.copy(foreignCurrencyCode = code, conversionRate = null, rateError = null) }
+        fetchRate()
+    }
+
+    fun onForeignAmountChange(amountText: String) {
+        _uiState.update { it.copy(foreignAmountText = amountText) }
+        recomputeConvertedAmount()
+    }
+
+    private fun fetchRate() {
+        val repository = exchangeRateRepository
+        val state = _uiState.value
+        if (repository == null || !state.useForeignCurrency) return
+
+        viewModelScope.launch {
+            _uiState.update { it.copy(isFetchingRate = true, rateError = null) }
+            when (val result = repository.getRate(state.foreignCurrencyCode, baseCurrencyCode)) {
+                is ExchangeRateResult.Success -> {
+                    _uiState.update {
+                        it.copy(
+                            isFetchingRate = false,
+                            conversionRate = result.rate,
+                            rateTimestampEpochMillis = result.fetchedAtEpochMillis,
+                            rateIsFromCache = result.isFromCache,
+                            rateError = if (result.isFromCache) "Using a recently cached rate - offline or the live rate is unavailable." else null
+                        )
+                    }
+                    recomputeConvertedAmount()
+                }
+                ExchangeRateResult.Unavailable -> _uiState.update {
+                    it.copy(isFetchingRate = false, conversionRate = null, rateError = "Live conversion is temporarily unavailable.")
+                }
+                ExchangeRateResult.UnsupportedCurrency -> _uiState.update {
+                    it.copy(isFetchingRate = false, conversionRate = null, rateError = "This currency isn't supported.")
+                }
+            }
+        }
+    }
+
+    // Keeps amountText (the base-currency value actually saved) in sync with the foreign-currency
+    // input, whenever either changes - the user only ever edits foreignAmountText directly while
+    // in foreign-currency mode.
+    private fun recomputeConvertedAmount() {
+        val state = _uiState.value
+        val rate = state.conversionRate ?: return
+        val originalCents = parseAmountToCents(state.foreignAmountText) ?: return
+        val convertedCents = CurrencyConversion.convertToBaseCents(originalCents, rate)
+        _uiState.update { it.copy(amountText = formatAmountInCents(convertedCents), amountError = null) }
+    }
+
     fun save() {
         val state = _uiState.value
         if (state.isSaving) return
@@ -263,6 +330,9 @@ class AddTransactionViewModel(
                 return@launch
             }
 
+            val originalAmountCents = if (state.useForeignCurrency) parseAmountToCents(state.foreignAmountText) else null
+            val conversionRate = if (state.useForeignCurrency) state.conversionRate else null
+
             try {
                 if (id != null) {
                     transactionRepository.update(
@@ -272,7 +342,11 @@ class AddTransactionViewModel(
                             type = state.type,
                             category = validCategory,
                             timestamp = state.dateMillis,
-                            note = state.note.trim()
+                            note = state.note.trim(),
+                            originalAmountCents = originalAmountCents,
+                            originalCurrencyCode = if (state.useForeignCurrency) state.foreignCurrencyCode else null,
+                            conversionRate = conversionRate,
+                            rateTimestampEpochMillis = if (state.useForeignCurrency) state.rateTimestampEpochMillis else null
                         )
                     )
                 } else {
@@ -282,7 +356,11 @@ class AddTransactionViewModel(
                             type = state.type,
                             category = validCategory,
                             timestamp = state.dateMillis,
-                            note = state.note.trim()
+                            note = state.note.trim(),
+                            originalAmountCents = originalAmountCents,
+                            originalCurrencyCode = if (state.useForeignCurrency) state.foreignCurrencyCode else null,
+                            conversionRate = conversionRate,
+                            rateTimestampEpochMillis = if (state.useForeignCurrency) state.rateTimestampEpochMillis else null
                         )
                     )
                     // A receipt picked before the transaction existed is attached now that it
@@ -311,10 +389,15 @@ class AddTransactionViewModel(
             categoryRepository: CategoryRepository,
             recurringOccurrenceManager: RecurringOccurrenceManager,
             transactionId: Long? = null,
-            receiptRepository: ReceiptRepository? = null
+            receiptRepository: ReceiptRepository? = null,
+            exchangeRateRepository: ExchangeRateRepository? = null,
+            baseCurrencyCode: String = "USD"
         ) = viewModelFactory {
             initializer {
-                AddTransactionViewModel(transactionRepository, categoryRepository, recurringOccurrenceManager, transactionId, receiptRepository)
+                AddTransactionViewModel(
+                    transactionRepository, categoryRepository, recurringOccurrenceManager, transactionId,
+                    receiptRepository, exchangeRateRepository, baseCurrencyCode
+                )
             }
         }
     }

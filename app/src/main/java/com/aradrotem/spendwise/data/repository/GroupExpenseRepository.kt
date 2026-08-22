@@ -4,24 +4,32 @@ import com.aradrotem.spendwise.data.local.ExpenseGroupDao
 import com.aradrotem.spendwise.data.local.ExpenseGroupEntity
 import com.aradrotem.spendwise.data.local.GroupExpenseDao
 import com.aradrotem.spendwise.data.local.GroupExpenseEntity
+import com.aradrotem.spendwise.data.local.GroupExpensePendingDeletionDao
+import com.aradrotem.spendwise.data.local.GroupExpensePendingDeletionEntity
 import com.aradrotem.spendwise.data.local.GroupExpenseShareEntity
 import com.aradrotem.spendwise.data.local.GroupMemberDao
 import com.aradrotem.spendwise.data.local.GroupMemberEntity
+import com.aradrotem.spendwise.data.local.GroupRole
 import com.aradrotem.spendwise.data.local.GroupSplitMethod
 import com.aradrotem.spendwise.data.sync.SyncEntityType
 import com.aradrotem.spendwise.data.sync.SyncMetadataDao
 import com.aradrotem.spendwise.data.sync.SyncStamper
+import com.aradrotem.spendwise.domain.ReconciledExpense
+import com.aradrotem.spendwise.domain.RemoteGroupExpense
 import kotlinx.coroutines.flow.Flow
 
 // Wraps the three closely-coupled group-expense DAOs (a group's members, expenses and shares are
 // only ever created/edited/deleted together - see the delete-safety and cross-group checks below).
 // Kept as a single repository, mirroring how RecurringPaymentRepository owns its plan DAO, rather
-// than splitting into one repository per table.
+// than splitting into one repository per table. Also owns the shared-group sync-support surface
+// SharedGroupSyncEngine drives (getOrCreateLocalGroupForSync onward) - kept here rather than in
+// the engine itself so it stays the only place that ever touches these DAOs directly.
 class GroupExpenseRepository(
     private val groupDao: ExpenseGroupDao,
     private val memberDao: GroupMemberDao,
     private val expenseDao: GroupExpenseDao,
-    syncMetadataDao: SyncMetadataDao? = null
+    private val syncMetadataDao: SyncMetadataDao? = null,
+    private val pendingDeletionDao: GroupExpensePendingDeletionDao? = null
 ) {
     private val groupSyncStamper = SyncStamper(syncMetadataDao, SyncEntityType.GROUP)
     private val memberSyncStamper = SyncStamper(syncMetadataDao, SyncEntityType.GROUP_MEMBER)
@@ -70,6 +78,15 @@ class GroupExpenseRepository(
             memberSyncStamper.markDirty(memberId)
         }
         return Result.success(groupId)
+    }
+
+    // Upgrades a purely local group to a real shared one (Step 19 Part 3) - only sets the two new
+    // identity columns; every existing member/expense/settlement row is untouched, so nothing
+    // about the group's existing data is affected by this call.
+    suspend fun markGroupShared(id: Long, groupSyncId: String, ownerUid: String) {
+        val existing = groupDao.getById(id) ?: return
+        groupDao.update(existing.copy(groupSyncId = groupSyncId, ownerUid = ownerUid))
+        groupSyncStamper.markDirty(id)
     }
 
     suspend fun renameGroup(id: Long, name: String): Result<Unit> {
@@ -201,10 +218,119 @@ class GroupExpenseRepository(
     }
 
     suspend fun deleteExpense(expense: GroupExpenseEntity) {
+        // A shared-group expense's cloud counterpart must be deleted too - queued BEFORE the local
+        // row is gone, since expense.cloudId (and the group's groupSyncId) wouldn't be recoverable
+        // afterward. SharedGroupSyncEngine drains this queue at its usual trigger points, same
+        // pattern as ReceiptRepository's pending-deletion retry.
+        if (expense.cloudId != null && pendingDeletionDao != null) {
+            val group = groupDao.getById(expense.groupId)
+            val groupSyncId = group?.groupSyncId
+            if (groupSyncId != null) {
+                pendingDeletionDao.insert(GroupExpensePendingDeletionEntity(groupSyncId = groupSyncId, cloudId = expense.cloudId))
+            }
+        }
+
         val shareIds = expenseDao.getSharesForExpense(expense.id).map { it.id }
         expenseDao.deleteExpense(expense)
         expenseSyncStamper.markDeleted(expense.id)
         shareIds.forEach { shareSyncStamper.markDeleted(it) }
+    }
+
+    // ---------------------------------------------------------------------------------------
+    // SharedGroupSyncEngine support (Step 19 completion pass)
+    // ---------------------------------------------------------------------------------------
+
+    // Finds the local mirror row for a shared group discovered via
+    // users/{uid}/groupMemberships, or creates one if this is the first time this device has
+    // heard of it (e.g. membership was accepted on a different device). Never creates a second
+    // local row for a groupSyncId that already has one.
+    suspend fun getOrCreateLocalGroupForSync(groupSyncId: String, groupName: String): Long {
+        val existing = groupDao.getByGroupSyncId(groupSyncId)
+        if (existing != null) return existing.id
+        val groupId = groupDao.insert(ExpenseGroupEntity(name = groupName, groupSyncId = groupSyncId))
+        groupSyncStamper.markDirty(groupId)
+        return groupId
+    }
+
+    // Inserts or updates the local member row for one authenticated cloud member, keyed by
+    // memberUid (not name) - this is what prevents creating a duplicate person on every sync pass,
+    // and what keeps a real member distinct from any pre-Step-19 local-only (memberUid == null)
+    // member even if their names happen to match.
+    suspend fun upsertSyncedMember(groupId: Long, memberUid: String, displayName: String, role: GroupRole) {
+        val existing = memberDao.getByGroup(groupId).firstOrNull { it.memberUid == memberUid }
+        if (existing != null) {
+            if (existing.name != displayName || existing.role != role) {
+                memberDao.update(existing.copy(name = displayName, role = role))
+                memberSyncStamper.markDirty(existing.id)
+            }
+            return
+        }
+        val memberId = memberDao.insert(GroupMemberEntity(groupId = groupId, name = displayName, memberUid = memberUid, role = role))
+        memberSyncStamper.markDirty(memberId)
+    }
+
+    // uid -> local member id, for authenticated members only (memberUid != null) - what
+    // GroupExpenseReconciler needs to translate a remote expense's paidByUid/shares into local ids.
+    suspend fun getMemberUidMap(groupId: Long): Map<String, Long> =
+        memberDao.getByGroup(groupId).mapNotNull { member -> member.memberUid?.let { it to member.id } }.toMap()
+
+    // The reverse mapping, for pushing a locally-created expense's payer/participants as uids.
+    suspend fun getMemberLocalIdToUidMap(groupId: Long): Map<Long, String> =
+        memberDao.getByGroup(groupId).mapNotNull { member -> member.memberUid?.let { uid -> member.id to uid } }.toMap()
+
+    suspend fun getExpensesByCloudId(groupId: Long): Map<String, GroupExpenseEntity> =
+        expenseDao.getByGroupOnce(groupId).mapNotNull { expense -> expense.cloudId?.let { it to expense } }.toMap()
+
+    // Applies GroupExpenseReconciler's output - each entry is either a brand-new local insert
+    // (existingLocalId == null) or an in-place update of an already-synced row.
+    suspend fun applyReconciledExpenses(reconciled: List<ReconciledExpense>) {
+        reconciled.forEach { item ->
+            if (item.existingLocalId == null) {
+                expenseDao.insertExpenseWithShares(
+                    item.entity,
+                    item.shares.map { (memberId, cents) -> GroupExpenseShareEntity(expenseId = 0, memberId = memberId, shareAmountCents = cents) }
+                )
+            } else {
+                expenseDao.updateExpenseWithShares(
+                    item.entity,
+                    item.shares.map { (memberId, cents) -> GroupExpenseShareEntity(expenseId = item.existingLocalId, memberId = memberId, shareAmountCents = cents) }
+                )
+            }
+        }
+    }
+
+    // Applies GroupExpenseReconciler.localIdsToDelete - a previously-synced local expense whose
+    // cloud counterpart is gone. Plain DAO deletes (not the public deleteExpense above), since
+    // there is nothing left to push back to the cloud - the cloud is what's authoritative here.
+    suspend fun applyRemoteDeletions(localIds: List<Long>) {
+        localIds.forEach { id ->
+            val expense = expenseDao.getById(id) ?: return@forEach
+            expenseDao.deleteExpense(expense)
+        }
+    }
+
+    // Shared-group expenses awaiting a cloud push - reuses the SAME dirty-flag mechanism
+    // (SyncMetadataDao/SyncStamper) the pre-existing personal SyncEngine already relies on,
+    // rather than a second bookkeeping scheme. Because createExpense AND updateExpense both call
+    // expenseSyncStamper.markDirty, this single query naturally covers both "never pushed yet"
+    // (cloudId == null) and "already pushed once, edited again since" - i.e. this is also what
+    // makes an edit on one device propagate to another (see SharedGroupSyncEngine's remote-update
+    // support).
+    suspend fun getPendingPushExpenses(groupId: Long): List<GroupExpenseEntity> {
+        val dirtyIds = syncMetadataDao?.getPendingByType(SyncEntityType.GROUP_EXPENSE.tag)?.map { it.localId }?.toSet().orEmpty()
+        if (dirtyIds.isEmpty()) return emptyList()
+        return expenseDao.getByGroupOnce(groupId).filter { it.id in dirtyIds }
+    }
+
+    suspend fun markExpensePushed(expenseId: Long, cloudId: String, createdByUid: String) {
+        expenseDao.markPushed(expenseId, cloudId, createdByUid)
+        syncMetadataDao?.clearPending(SyncEntityType.GROUP_EXPENSE.tag, expenseId)
+    }
+
+    suspend fun getPendingDeletions(): List<GroupExpensePendingDeletionEntity> = pendingDeletionDao?.getAll().orEmpty()
+
+    suspend fun clearPendingDeletion(entity: GroupExpensePendingDeletionEntity) {
+        pendingDeletionDao?.delete(entity)
     }
 
     private suspend fun validateExpenseInput(

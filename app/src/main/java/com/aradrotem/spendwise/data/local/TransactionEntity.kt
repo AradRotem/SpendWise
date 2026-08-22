@@ -60,5 +60,18 @@ data class TransactionEntity(
     // confirmed successful. Retried at the same trigger points as Firestore sync - see
     // ReceiptRepository.retryPendingUploads.
     @ColumnInfo(defaultValue = "0")
-    val receiptUploadPending: Boolean = false
+    val receiptUploadPending: Boolean = false,
+
+    // Step 19: only set when this transaction was entered in a currency other than the account's
+    // base currency. amountInCents above always holds the converted base-currency value (so every
+    // existing query/report/budget calculation keeps working unchanged); these four fields are
+    // purely a historical record of the original entry - never used to recompute amountInCents
+    // later, so a transaction's displayed value never silently changes when today's rate moves.
+    val originalAmountCents: Long? = null,
+    // ISO 4217 currency code, e.g. "USD".
+    val originalCurrencyCode: String? = null,
+    // Base-currency units per 1 unit of originalCurrencyCode, at the moment this transaction was
+    // saved.
+    val conversionRate: Double? = null,
+    val rateTimestampEpochMillis: Long? = null
 )

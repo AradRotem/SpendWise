@@ -4,9 +4,13 @@ import com.aradrotem.spendwise.domain.AnalyticsTimeRange
 import com.aradrotem.spendwise.domain.BudgetActualPoint
 import com.aradrotem.spendwise.domain.CategorySpendingPoint
 import com.aradrotem.spendwise.domain.CategoryTrendPoint
+import com.aradrotem.spendwise.domain.CumulativeSpendingPoint
 import com.aradrotem.spendwise.domain.FinancialInsight
+import com.aradrotem.spendwise.domain.MonthEndProjection
 import com.aradrotem.spendwise.domain.MonthlyIncomeExpensePoint
 import com.aradrotem.spendwise.domain.MonthlySpendingPoint
+import com.aradrotem.spendwise.domain.TopPayeePoint
+import com.aradrotem.spendwise.domain.WeekdaySpendingPoint
 import java.time.YearMonth
 
 data class VisualAnalyticsUiState(
@@ -44,7 +48,21 @@ data class VisualAnalyticsUiState(
     val budgetActuals: List<BudgetActualPoint> = emptyList(),
 
     // Textual insights (section 7).
-    val insights: List<FinancialInsight> = emptyList()
+    val insights: List<FinancialInsight> = emptyList(),
+
+    // Spending by day of week, across the whole selected period (section 8, Step 19).
+    val weekdaySpending: List<WeekdaySpendingPoint> = emptyList(),
+
+    // Top payees/merchants by total spend, approximated from the transaction note field since
+    // there is no dedicated merchant field (section 9, Step 19).
+    val topPayees: List<TopPayeePoint> = emptyList(),
+
+    // Cumulative spending through the selected calendar month, day by day (section 10, Step 19).
+    val cumulativeSpending: List<CumulativeSpendingPoint> = emptyList(),
+
+    // Projected month-end spending, only populated when the selected month is the current
+    // calendar month - a projection for a past or future month is meaningless (section 11, Step 19).
+    val monthEndProjection: MonthEndProjection? = null
 ) {
     val netBalanceCents: Long get() = totalIncomeCents - totalExpenseCents
     val isSingleMonth: Boolean get() = timeRange == AnalyticsTimeRange.SELECTED_MONTH

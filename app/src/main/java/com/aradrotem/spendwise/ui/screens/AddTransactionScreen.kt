@@ -18,12 +18,15 @@ import androidx.compose.foundation.text.KeyboardOptions
 import androidx.compose.foundation.verticalScroll
 import androidx.compose.material3.Button
 import androidx.compose.material3.CircularProgressIndicator
+import androidx.compose.material3.DropdownMenu
+import androidx.compose.material3.DropdownMenuItem
 import androidx.compose.material3.ExperimentalMaterial3Api
 import androidx.compose.material3.HorizontalDivider
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.OutlinedButton
 import androidx.compose.material3.OutlinedTextField
 import androidx.compose.material3.Scaffold
+import androidx.compose.material3.Switch
 import androidx.compose.material3.Text
 import androidx.compose.material3.TextButton
 import androidx.compose.material3.TopAppBar
@@ -47,6 +50,7 @@ import coil3.compose.AsyncImage
 import com.aradrotem.spendwise.SpendWiseApplication
 import com.aradrotem.spendwise.data.local.TransactionType
 import com.aradrotem.spendwise.data.receipt.ReceiptImageProcessor
+import com.aradrotem.spendwise.domain.CurrencyConversion
 import com.aradrotem.spendwise.ui.components.CategoryDropdownField
 import com.aradrotem.spendwise.ui.components.DateField
 import kotlinx.coroutines.launch
@@ -67,7 +71,8 @@ fun AddTransactionScreen(
             app.repositories.categoryRepository,
             app.repositories.recurringOccurrenceManager,
             transactionId,
-            app.repositories.receiptRepository
+            app.repositories.receiptRepository,
+            app.repositories.exchangeRateRepository
         )
     )
 ) {
@@ -186,11 +191,14 @@ fun AddTransactionScreen(
                 onValueChange = viewModel::onAmountChange,
                 label = { Text("Amount") },
                 singleLine = true,
+                enabled = !uiState.useForeignCurrency,
                 isError = uiState.amountError != null,
                 supportingText = { uiState.amountError?.let { Text(it) } },
                 keyboardOptions = KeyboardOptions(keyboardType = KeyboardType.Decimal),
                 modifier = Modifier.fillMaxWidth()
             )
+
+            ForeignCurrencySection(uiState, viewModel)
 
             CategoryDropdownField(
                 selected = uiState.category,
@@ -248,6 +256,64 @@ fun AddTransactionScreen(
                 } else {
                     Text(if (isEditMode) "Update" else "Save")
                 }
+            }
+        }
+    }
+}
+
+// Optional foreign-currency entry (Step 19). Fully collapsed away when disabled, so a normal
+// preferred-currency transaction keeps exactly the same one-field flow as before this feature.
+@Composable
+private fun ForeignCurrencySection(uiState: AddTransactionUiState, viewModel: AddTransactionViewModel) {
+    Column(verticalArrangement = Arrangement.spacedBy(8.dp)) {
+        Row(
+            modifier = Modifier.fillMaxWidth(),
+            horizontalArrangement = Arrangement.SpaceBetween
+        ) {
+            Text("Enter in a different currency", style = MaterialTheme.typography.bodyMedium)
+            Switch(checked = uiState.useForeignCurrency, onCheckedChange = viewModel::onForeignCurrencyToggle)
+        }
+
+        if (uiState.useForeignCurrency) {
+            CurrencyDropdown(selected = uiState.foreignCurrencyCode, onSelect = viewModel::onForeignCurrencyCodeChange)
+
+            OutlinedTextField(
+                value = uiState.foreignAmountText,
+                onValueChange = viewModel::onForeignAmountChange,
+                label = { Text("Amount in ${uiState.foreignCurrencyCode}") },
+                singleLine = true,
+                keyboardOptions = KeyboardOptions(keyboardType = KeyboardType.Decimal),
+                modifier = Modifier.fillMaxWidth()
+            )
+
+            when {
+                uiState.isFetchingRate -> Text("Fetching exchange rate…", style = MaterialTheme.typography.bodySmall)
+                uiState.conversionRate != null -> {
+                    val sourceLabel = if (uiState.rateIsFromCache) "cached rate" else "live rate"
+                    Text(
+                        "1 ${uiState.foreignCurrencyCode} = %.4f ($sourceLabel)".format(uiState.conversionRate),
+                        style = MaterialTheme.typography.bodySmall,
+                        color = MaterialTheme.colorScheme.onSurfaceVariant
+                    )
+                }
+            }
+            uiState.rateError?.let {
+                Text(it, style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.error)
+            }
+        }
+    }
+}
+
+@Composable
+private fun CurrencyDropdown(selected: String, onSelect: (String) -> Unit) {
+    var expanded by remember { mutableStateOf(false) }
+    Box {
+        OutlinedButton(onClick = { expanded = true }) {
+            Text(selected)
+        }
+        DropdownMenu(expanded = expanded, onDismissRequest = { expanded = false }) {
+            CurrencyConversion.SUPPORTED_CURRENCIES.forEach { code ->
+                DropdownMenuItem(text = { Text(code) }, onClick = { expanded = false; onSelect(code) })
             }
         }
     }

@@ -1,25 +1,69 @@
 rules_version = '2';
 
-// SpendWise Step 17 Firestore security rules.
+// SpendWise Firestore security rules.
+// Step 17 personal-data schema (unchanged) + Step 19 real multi-user shared groups.
 //
-// Schema (all per-user, under users/{uid}):
+// Personal data (all per-user, under users/{uid}):
 //   users/{uid}                                       - profile doc
 //   users/{uid}/transactions/{syncId}
 //   users/{uid}/categories/{syncId}
 //   users/{uid}/budgets/{syncId}
 //   users/{uid}/recurringPlans/{syncId}
 //   users/{uid}/recurringOccurrenceExceptions/{syncId}
-//   users/{uid}/groups/{syncId}
-//   users/{uid}/groupMembers/{syncId}          (field: groupSyncId)
-//   users/{uid}/groupExpenses/{syncId}         (field: groupSyncId)
-//   users/{uid}/groupExpenseShares/{syncId}    (field: groupExpenseSyncId)
+//   users/{uid}/groups/{syncId}                       - legacy per-user local-group sync rows
+//                                                        (pre-Step-19 groups that were never
+//                                                        upgraded to real shared groups)
+//   users/{uid}/groupMembers/{syncId}
+//   users/{uid}/groupExpenses/{syncId}
+//   users/{uid}/groupExpenseShares/{syncId}
+//   users/{uid}/groupMemberships/{groupId}            - Step 19: index of shared groups(below)
+//                                                        this user is a member of
 //
-// Core rule: a signed-in user may only read/write documents under their own users/{uid} tree.
-// Nothing here is shared across accounts yet - Step 17 explicitly does not implement real
-// cross-account group membership (see the app's Step 17 scope notes); that is left for a later
-// step, and this schema/ruleset does not block extending it then.
+// Core rule for all of the above: a signed-in user may only read/write documents under their own
+// users/{uid} tree. Nothing under users/{uid} is ever shared across accounts.
+//
+// Real multi-user shared groups (Step 19) - one canonical document tree per group, NOT duplicated
+// per member:
+//   groups/{groupId}                                  - name, ownerUid, createdAt
+//   groups/{groupId}/members/{uid}                    - role ('OWNER'|'MEMBER'), displayName,
+//                                                        email, joinedAt
+//   groups/{groupId}/expenses/{cloudId}                - title, amountCents, dateEpochDay,
+//                                                        paidByUid, splitMethod, note, createdAt,
+//                                                        createdByUid, shares (map<uid, cents>)
+//   groups/{groupId}/invitations/{invitationId}        - groupName, inviterUid, inviterEmail,
+//                                                        inviteeEmail, status
+//                                                        ('PENDING'|'ACCEPTED'|'DECLINED'|
+//                                                        'CANCELLED'), createdAt, respondedAt
+//
+// Security summary:
+//  - Only a group's members may read that group's own doc, member list, or expenses.
+//  - Only the owner may edit/delete the group itself, invite members, or remove another member.
+//  - A member may add expenses, and edit/delete only expenses they themselves created; the owner
+//    may edit/delete any expense.
+//  - Only the group owner may create an invitation; only the invitee (matched by their
+//    authenticated email, via request.auth.token.email.lower()) may accept/decline it, and only
+//    the owner may cancel a still-pending one. No other invitation field may change on that
+//    update. inviteeEmail is always written client-side trimmed+lowercased (see
+//    FirestoreGroupCloudRepository) - request.auth.token.email is NOT guaranteed to already be
+//    lowercase (Firebase Auth preserves the case an account signed up with), so every rule
+//    comparing the two calls .lower() on the token email. Missing this was the root cause of a
+//    real bug: an invitee whose account email had different case than the invite was typed in
+//    would have every invitation silently excluded from their query results (Firestore drops
+//    non-authorized documents from list/query results with no error - it only throws for a get()
+//    on a specific unauthorized document), with no error surfaced anywhere.
+//  - A user may only create their own members/{uid} doc as OWNER at group-creation time (verified
+//    against the group's own ownerUid field), or as MEMBER by referencing an invitation that is
+//    already ACCEPTED and addressed to their own authenticated email - never by simply claiming
+//    membership. See FirestoreGroupCloudRepository for the exact (non-atomic, sequential) write
+//    ordering this depends on.
+//  - No group data can be enumerated by a non-member: reads always require isGroupMember(groupId)
+//    (or, for invitations, being the addressed invitee).
 service cloud.firestore {
   match /databases/{database}/documents {
+
+    // ---------------------------------------------------------------------------------------
+    // Personal per-user data (Step 17+)
+    // ---------------------------------------------------------------------------------------
     match /users/{uid} {
       allow read, write: if request.auth != null && request.auth.uid == uid;
 
@@ -27,5 +71,104 @@ service cloud.firestore {
         allow read, write: if request.auth != null && request.auth.uid == uid;
       }
     }
+
+    // ---------------------------------------------------------------------------------------
+    // Real multi-user shared groups (Step 19)
+    // ---------------------------------------------------------------------------------------
+    function isSignedIn() {
+      return request.auth != null;
+    }
+
+    function isGroupMember(groupId) {
+      return isSignedIn() &&
+        exists(/databases/$(database)/documents/groups/$(groupId)/members/$(request.auth.uid));
+    }
+
+    function memberRole(groupId) {
+      return get(/databases/$(database)/documents/groups/$(groupId)/members/$(request.auth.uid)).data.role;
+    }
+
+    function isGroupOwner(groupId) {
+      return isGroupMember(groupId) && memberRole(groupId) == 'OWNER';
+    }
+
+    match /groups/{groupId} {
+      allow read: if isGroupMember(groupId);
+      // The group document itself carries no membership - anyone signed in may create one, but
+      // only as their own ownerUid; the owner's members/{uid} doc is created in a separate,
+      // subsequent write (see FirestoreGroupCloudRepository.createSharedGroup).
+      allow create: if isSignedIn() && request.resource.data.ownerUid == request.auth.uid;
+      allow update, delete: if isGroupOwner(groupId);
+
+      match /members/{memberUid} {
+        allow read: if isGroupMember(groupId);
+        allow create: if isSignedIn() && request.auth.uid == memberUid &&
+          (
+            // Case 1: the group's owner creating their own OWNER membership right after the
+            // group document itself was created (see createSharedGroup's write ordering).
+            (
+              request.resource.data.role == 'OWNER' &&
+              get(/databases/$(database)/documents/groups/$(groupId)).data.ownerUid == request.auth.uid
+            ) ||
+            // Case 2: an invitee accepting a real invitation - acceptedViaInvitationId must
+            // reference an invitation already marked ACCEPTED and addressed to this exact
+            // authenticated email (see acceptInvitation's write ordering: the invitation is
+            // updated to ACCEPTED first, then this member doc is created).
+            (
+              request.resource.data.role == 'MEMBER' &&
+              get(/databases/$(database)/documents/groups/$(groupId)/invitations/$(request.resource.data.acceptedViaInvitationId)).data.inviteeEmail == request.auth.token.email.lower() &&
+              get(/databases/$(database)/documents/groups/$(groupId)/invitations/$(request.resource.data.acceptedViaInvitationId)).data.status == 'ACCEPTED'
+            )
+          );
+        // The owner may update/remove any member (e.g. removing someone); a member may update
+        // their own non-role fields (e.g. display name) or remove themselves (leave the group) -
+        // but never change their own role, which would be a privilege escalation.
+        allow update: if isGroupOwner(groupId) ||
+          (isSignedIn() && request.auth.uid == memberUid && request.resource.data.role == resource.data.role);
+        allow delete: if isGroupOwner(groupId) || (isSignedIn() && request.auth.uid == memberUid);
+      }
+
+      match /expenses/{expenseId} {
+        allow read: if isGroupMember(groupId);
+        allow create: if isGroupMember(groupId) && request.resource.data.createdByUid == request.auth.uid;
+        allow update, delete: if isGroupOwner(groupId) ||
+          (isGroupMember(groupId) && resource.data.createdByUid == request.auth.uid);
+      }
+
+      match /invitations/{invitationId} {
+        // Readable by any current group member (so the owner can see sent invitations) or by the
+        // exact invitee this specific document is addressed to - never a broader query surface,
+        // since the collection-group query used to list "invitations sent to me" (see
+        // FirestoreGroupCloudRepository.observeIncomingInvitations) is itself filtered
+        // per-document by this same rule.
+        allow read: if isGroupMember(groupId) ||
+          (isSignedIn() && resource.data.inviteeEmail == request.auth.token.email.lower());
+        allow create: if isGroupOwner(groupId) &&
+          request.resource.data.inviterUid == request.auth.uid &&
+          request.resource.data.status == 'PENDING';
+        // Exactly one status transition is allowed per update, and only by the correct party:
+        // the invitee may accept/decline their own still-pending invitation; the owner may cancel
+        // a still-pending one. Every other field must stay unchanged, so an update can never be
+        // used to redirect an invitation to a different group or a different invitee.
+        allow update: if isSignedIn() && resource.data.status == 'PENDING' &&
+          (
+            (resource.data.inviteeEmail == request.auth.token.email.lower() &&
+             request.resource.data.status in ['ACCEPTED', 'DECLINED']) ||
+            (isGroupOwner(groupId) && request.resource.data.status == 'CANCELLED')
+          ) &&
+          request.resource.data.inviteeEmail == resource.data.inviteeEmail &&
+          request.resource.data.inviterUid == resource.data.inviterUid &&
+          request.resource.data.groupName == resource.data.groupName;
+        allow delete: if isGroupOwner(groupId);
+      }
+    }
+
+    // Step 19's users/{uid}/groupMemberships/{groupId} index (used by
+    // GroupCloudRepository.getMyMemberships for membership discovery) needs no separate rule
+    // block here - it already matches the generic "users/{uid}/{collection}/{docId}" rule above
+    // (own-uid-only read/write), same as every other per-user collection. Purely a convenience
+    // index for "my groups" discovery; actual access to a group's data is governed entirely by
+    // groups/{groupId}/members/{uid}, so this index being wrong/stale can never grant
+    // unauthorized access.
   }
 }

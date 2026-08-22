@@ -68,6 +68,96 @@ val MIGRATION_8_9: Migration = object : Migration(8, 9) {
     }
 }
 
+// Step 19: two new, entirely additive dedup-state tables for notifications (budget-threshold
+// alerts and recurring-payment reminders) - non-destructive, does not touch any existing data.
+val MIGRATION_9_10: Migration = object : Migration(9, 10) {
+    override fun migrate(connection: SQLiteConnection) {
+        connection.execSQL(
+            "CREATE TABLE IF NOT EXISTS `notified_budget_thresholds` (" +
+                "`id` INTEGER PRIMARY KEY AUTOINCREMENT NOT NULL, " +
+                "`categoryName` TEXT NOT NULL, " +
+                "`yearMonth` TEXT NOT NULL, " +
+                "`thresholdType` TEXT NOT NULL, " +
+                "`notifiedAtEpochMillis` INTEGER NOT NULL)"
+        )
+        connection.execSQL(
+            "CREATE UNIQUE INDEX IF NOT EXISTS `index_notified_budget_thresholds_categoryName_yearMonth_thresholdType` " +
+                "ON `notified_budget_thresholds` (`categoryName`, `yearMonth`, `thresholdType`)"
+        )
+
+        connection.execSQL(
+            "CREATE TABLE IF NOT EXISTS `notified_recurring_reminders` (" +
+                "`id` INTEGER PRIMARY KEY AUTOINCREMENT NOT NULL, " +
+                "`planId` INTEGER NOT NULL, " +
+                "`scheduledYearMonth` TEXT NOT NULL, " +
+                "`notifiedAtEpochMillis` INTEGER NOT NULL)"
+        )
+        connection.execSQL(
+            "CREATE UNIQUE INDEX IF NOT EXISTS `index_notified_recurring_reminders_planId_scheduledYearMonth` " +
+                "ON `notified_recurring_reminders` (`planId`, `scheduledYearMonth`)"
+        )
+    }
+}
+
+// Step 19: foreign-currency transaction support. Four new nullable columns on transactions
+// (non-destructive - every existing row defaults to "not a foreign-currency entry"), plus a new,
+// entirely additive exchange-rate cache table used for offline/API-unavailable fallback.
+val MIGRATION_10_11: Migration = object : Migration(10, 11) {
+    override fun migrate(connection: SQLiteConnection) {
+        connection.execSQL("ALTER TABLE `transactions` ADD COLUMN `originalAmountCents` INTEGER")
+        connection.execSQL("ALTER TABLE `transactions` ADD COLUMN `originalCurrencyCode` TEXT")
+        connection.execSQL("ALTER TABLE `transactions` ADD COLUMN `conversionRate` REAL")
+        connection.execSQL("ALTER TABLE `transactions` ADD COLUMN `rateTimestampEpochMillis` INTEGER")
+
+        connection.execSQL(
+            "CREATE TABLE IF NOT EXISTS `cached_exchange_rates` (" +
+                "`id` INTEGER PRIMARY KEY AUTOINCREMENT NOT NULL, " +
+                "`fromCurrency` TEXT NOT NULL, " +
+                "`toCurrency` TEXT NOT NULL, " +
+                "`rate` REAL NOT NULL, " +
+                "`fetchedAtEpochMillis` INTEGER NOT NULL)"
+        )
+        connection.execSQL(
+            "CREATE UNIQUE INDEX IF NOT EXISTS `index_cached_exchange_rates_fromCurrency_toCurrency` " +
+                "ON `cached_exchange_rates` (`fromCurrency`, `toCurrency`)"
+        )
+    }
+}
+
+// Step 19: real multi-user shared groups. All new columns are nullable/defaulted, so every
+// existing local-only group, member, and expense keeps behaving exactly as before - a group only
+// becomes "shared" once its groupSyncId is explicitly set via GroupCloudRepository.shareExistingGroup.
+val MIGRATION_11_12: Migration = object : Migration(11, 12) {
+    override fun migrate(connection: SQLiteConnection) {
+        connection.execSQL("ALTER TABLE `expense_groups` ADD COLUMN `groupSyncId` TEXT")
+        connection.execSQL("ALTER TABLE `expense_groups` ADD COLUMN `ownerUid` TEXT")
+
+        connection.execSQL("ALTER TABLE `group_members` ADD COLUMN `memberUid` TEXT")
+        connection.execSQL("ALTER TABLE `group_members` ADD COLUMN `role` TEXT")
+
+        connection.execSQL("ALTER TABLE `group_expenses` ADD COLUMN `cloudId` TEXT")
+        connection.execSQL("ALTER TABLE `group_expenses` ADD COLUMN `createdByUid` TEXT")
+        connection.execSQL(
+            "CREATE UNIQUE INDEX IF NOT EXISTS `index_group_expenses_cloudId` ON `group_expenses` (`cloudId`)"
+        )
+    }
+}
+
+// Step 19 completion pass: durable queue for shared-group expense deletions still awaiting their
+// cloud counterpart's deletion (see GroupExpensePendingDeletionEntity) - entirely new, additive
+// table, non-destructive to any existing data.
+val MIGRATION_12_13: Migration = object : Migration(12, 13) {
+    override fun migrate(connection: SQLiteConnection) {
+        connection.execSQL(
+            "CREATE TABLE IF NOT EXISTS `group_expense_pending_deletions` (" +
+                "`id` INTEGER PRIMARY KEY AUTOINCREMENT NOT NULL, " +
+                "`groupSyncId` TEXT NOT NULL, " +
+                "`cloudId` TEXT NOT NULL, " +
+                "`createdAt` INTEGER NOT NULL)"
+        )
+    }
+}
+
 // Explicit, stable seed data for the built-in categories. Intentionally not derived from
 // TransactionCategory, since that enum may change independently of this historical migration.
 internal data class BuiltInCategorySeed(

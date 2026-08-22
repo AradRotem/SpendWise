@@ -32,6 +32,14 @@ abstract class GroupExpenseDao {
     @Query("SELECT * FROM group_expenses WHERE groupId = :groupId ORDER BY dateEpochDay DESC, id DESC")
     abstract fun observeByGroup(groupId: Long): Flow<List<GroupExpenseEntity>>
 
+    // One-shot equivalent of observeByGroup, used by SharedGroupSyncEngine's reconciliation pass
+    // (which runs once per sync, not as a live subscription).
+    @Query("SELECT * FROM group_expenses WHERE groupId = :groupId")
+    abstract suspend fun getByGroupOnce(groupId: Long): List<GroupExpenseEntity>
+
+    @Query("UPDATE group_expenses SET cloudId = :cloudId, createdByUid = :createdByUid WHERE id = :id")
+    abstract suspend fun markPushed(id: Long, cloudId: String, createdByUid: String)
+
     // Every expense across every group - used only by the group list screen to compute each
     // group's summary card (count/total/settled state) without a per-group subscription.
     @Query("SELECT * FROM group_expenses")

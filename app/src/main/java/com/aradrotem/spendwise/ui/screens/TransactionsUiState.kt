@@ -4,7 +4,8 @@ import com.aradrotem.spendwise.data.local.TransactionEntity
 
 data class TransactionsUiState(
     val transactions: List<TransactionEntity> = emptyList(),
-    val isLoading: Boolean = true
+    val isLoading: Boolean = true,
+    val dateFilter: TransactionDateFilter = TransactionDateFilter.All
 )
 
 // What the generated-transaction action menu should offer for a specific occurrence, resolved

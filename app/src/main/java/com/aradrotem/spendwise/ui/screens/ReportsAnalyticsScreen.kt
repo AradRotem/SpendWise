@@ -57,11 +57,17 @@ import com.aradrotem.spendwise.domain.CategoryExpenseDetails
 import com.aradrotem.spendwise.domain.CategorySpendingPoint
 import com.aradrotem.spendwise.domain.DisplayedCategoryTransaction
 import com.aradrotem.spendwise.domain.FinancialInsight
+import com.aradrotem.spendwise.domain.MonthEndProjection
 import com.aradrotem.spendwise.domain.MonthlySpendingPoint
+import com.aradrotem.spendwise.domain.TopPayeePoint
+import com.aradrotem.spendwise.domain.WeekdaySpendingPoint
 import com.aradrotem.spendwise.ui.components.DonutChart
 import com.aradrotem.spendwise.ui.components.DonutSegment
 import com.aradrotem.spendwise.ui.components.IncomeExpenseBarChart
+import com.aradrotem.spendwise.ui.components.LabeledBarChart
 import com.aradrotem.spendwise.ui.components.SingleSeriesBarChart
+import java.time.format.TextStyle
+import java.util.Locale
 import com.aradrotem.spendwise.ui.format.formatAmountInCents
 import com.aradrotem.spendwise.ui.format.formatDate
 import com.aradrotem.spendwise.ui.format.formatMonthYear
@@ -342,7 +348,133 @@ private fun PeriodModeSections(period: VisualAnalyticsUiState, uiState: ReportsA
     IncomeVsExpenseSection(period)
     MonthlyTrendSection(period)
     CategoryTrendSection(period, viewModel)
+    BudgetUtilizationSection(period)
+    CumulativeSpendingSection(period)
+    WeekdaySpendingSection(period)
+    TopPayeesSection(period)
+    MonthEndProjectionSection(period)
     InsightsSection(period.insights)
+}
+
+@Composable
+private fun BudgetUtilizationSection(period: VisualAnalyticsUiState) {
+    if (period.budgetActuals.isEmpty()) return
+    Column(verticalArrangement = Arrangement.spacedBy(12.dp)) {
+        Text("Budget utilization (${formatMonthYear(period.selectedMonth)})", style = MaterialTheme.typography.titleMedium)
+        Card(modifier = Modifier.fillMaxWidth()) {
+            Column(modifier = Modifier.padding(16.dp), verticalArrangement = Arrangement.spacedBy(12.dp)) {
+                period.budgetActuals.forEach { point ->
+                    val overBudget = point.remainingCents < 0L
+                    Column(verticalArrangement = Arrangement.spacedBy(4.dp)) {
+                        Row(modifier = Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.SpaceBetween) {
+                            Text(formatCategoryDisplayName(point.categoryName))
+                            Text(
+                                "${(point.usageFraction * 100).roundToInt()}%",
+                                color = if (overBudget) MaterialTheme.colorScheme.error else MaterialTheme.colorScheme.onSurface
+                            )
+                        }
+                        LinearProgressIndicator(
+                            progress = { point.usageFraction.coerceIn(0f, 1f) },
+                            modifier = Modifier.fillMaxWidth(),
+                            color = if (overBudget) MaterialTheme.colorScheme.error else MaterialTheme.colorScheme.primary
+                        )
+                    }
+                }
+            }
+        }
+    }
+}
+
+@Composable
+private fun CumulativeSpendingSection(period: VisualAnalyticsUiState) {
+    if (period.cumulativeSpending.isEmpty()) return
+    // Sampled at weekly-ish milestones so the bar chart stays readable instead of one bar per day.
+    val sampleDays = listOf(7, 14, 21, 28, period.cumulativeSpending.size)
+        .filter { it <= period.cumulativeSpending.size }
+        .distinct()
+    val samples = sampleDays.map { day -> period.cumulativeSpending[day - 1] }
+
+    Column(verticalArrangement = Arrangement.spacedBy(12.dp)) {
+        Text("Cumulative spending (${formatMonthYear(period.selectedMonth)})", style = MaterialTheme.typography.titleMedium)
+        LabeledBarChart(
+            labels = samples.map { "Day ${it.day}" },
+            valuesCents = samples.map { it.cumulativeExpenseCents },
+            barColor = MaterialTheme.colorScheme.primary
+        )
+    }
+}
+
+@Composable
+private fun WeekdaySpendingSection(period: VisualAnalyticsUiState) {
+    if (period.weekdaySpending.all { it.expenseCents == 0L }) return
+    val highest = period.weekdaySpending.filter { it.expenseCents > 0L }.maxByOrNull { it.expenseCents }
+    Column(verticalArrangement = Arrangement.spacedBy(12.dp)) {
+        Text("Spending by day of week", style = MaterialTheme.typography.titleMedium)
+        LabeledBarChart(
+            labels = period.weekdaySpending.map { weekdayShortLabel(it) },
+            valuesCents = period.weekdaySpending.map { it.expenseCents },
+            barColor = MaterialTheme.colorScheme.secondary
+        )
+        highest?.let {
+            Text(
+                "You tend to spend the most on ${weekdayFullLabel(it)}.",
+                style = MaterialTheme.typography.bodyMedium
+            )
+        }
+    }
+}
+
+// Kept as plain (non-@Composable) top-level functions - java.time's Locale.getDefault() is a
+// non-observable read that lint (NonObservableLocale) flags when called directly inside a
+// composable, but is fine here since these are ordinary functions evaluated once per call.
+private fun weekdayShortLabel(point: WeekdaySpendingPoint): String =
+    point.dayOfWeek.getDisplayName(TextStyle.SHORT, Locale.getDefault())
+
+private fun weekdayFullLabel(point: WeekdaySpendingPoint): String =
+    point.dayOfWeek.getDisplayName(TextStyle.FULL, Locale.getDefault())
+
+@Composable
+private fun TopPayeesSection(period: VisualAnalyticsUiState) {
+    if (period.topPayees.isEmpty()) return
+    Column(verticalArrangement = Arrangement.spacedBy(12.dp)) {
+        Text("Top payees", style = MaterialTheme.typography.titleMedium)
+        Card(modifier = Modifier.fillMaxWidth()) {
+            Column(modifier = Modifier.padding(16.dp), verticalArrangement = Arrangement.spacedBy(8.dp)) {
+                period.topPayees.forEachIndexed { index, payee ->
+                    Row(modifier = Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.SpaceBetween) {
+                        Text("${index + 1}. ${payee.name}")
+                        Text(formatAmountInCents(payee.totalCents))
+                    }
+                }
+            }
+        }
+    }
+}
+
+@Composable
+private fun MonthEndProjectionSection(period: VisualAnalyticsUiState) {
+    val projection = period.monthEndProjection ?: return
+    Column(verticalArrangement = Arrangement.spacedBy(12.dp)) {
+        Text("Month-end projection", style = MaterialTheme.typography.titleMedium)
+        Card(modifier = Modifier.fillMaxWidth()) {
+            Column(modifier = Modifier.padding(16.dp), verticalArrangement = Arrangement.spacedBy(6.dp)) {
+                if (projection.isReliable) {
+                    Text("At your current pace, you are projected to spend ${formatAmountInCents(projection.projectedTotalCents)} this month.")
+                    if (projection.projectedToExceedBudget) {
+                        Text(
+                            "Projected to exceed your monthly budget by ${formatAmountInCents(projection.projectedOverageCents)}.",
+                            color = MaterialTheme.colorScheme.error
+                        )
+                    }
+                } else {
+                    Text(
+                        "Not enough data yet this month for a reliable projection.",
+                        color = MaterialTheme.colorScheme.onSurfaceVariant
+                    )
+                }
+            }
+        }
+    }
 }
 
 @Composable

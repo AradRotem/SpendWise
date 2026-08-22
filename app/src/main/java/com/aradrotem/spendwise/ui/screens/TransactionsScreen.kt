@@ -5,6 +5,7 @@ import androidx.compose.foundation.combinedClickable
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
+import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.padding
@@ -12,8 +13,12 @@ import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.lazy.items
 import androidx.compose.material3.AlertDialog
 import androidx.compose.material3.CircularProgressIndicator
+import androidx.compose.material3.DropdownMenu
+import androidx.compose.material3.DropdownMenuItem
+import androidx.compose.material3.ExperimentalMaterial3Api
 import androidx.compose.material3.HorizontalDivider
 import androidx.compose.material3.MaterialTheme
+import androidx.compose.material3.OutlinedButton
 import androidx.compose.material3.Text
 import androidx.compose.material3.TextButton
 import androidx.compose.runtime.Composable
@@ -33,8 +38,12 @@ import androidx.lifecycle.viewmodel.compose.viewModel
 import com.aradrotem.spendwise.R
 import com.aradrotem.spendwise.SpendWiseApplication
 import com.aradrotem.spendwise.data.local.TransactionEntity
+import com.aradrotem.spendwise.ui.components.DateField
 import com.aradrotem.spendwise.ui.components.TransactionRow
 import com.aradrotem.spendwise.ui.components.hasReceipt
+import com.aradrotem.spendwise.ui.format.formatDate
+import com.aradrotem.spendwise.ui.format.formatMonthYear
+import java.time.YearMonth
 import kotlinx.coroutines.launch
 
 // A generated transaction and its resolved action-menu info, always set together (see
@@ -51,6 +60,98 @@ fun receiptClickHandler(transaction: TransactionEntity, onViewReceipt: (Long) ->
     } else {
         null
     }
+
+// Human-readable label for the current-filter indicator - kept as a top-level pure function so
+// the exact wording is directly unit-testable without Compose.
+fun transactionDateFilterLabel(filter: TransactionDateFilter): String = when (filter) {
+    is TransactionDateFilter.All -> "All transactions"
+    is TransactionDateFilter.Month -> formatMonthYear(filter.yearMonth)
+    is TransactionDateFilter.CustomRange -> "${formatDate(filter.startMillis)} – ${formatDate(filter.endExclusiveMillis - 1)}"
+}
+
+@OptIn(ExperimentalMaterial3Api::class)
+@Composable
+private fun TransactionDateFilterBar(
+    currentFilter: TransactionDateFilter,
+    onSelectMonth: (YearMonth) -> Unit,
+    onSelectCustomRange: (startMillis: Long, endExclusiveMillis: Long) -> Unit,
+    onClear: () -> Unit
+) {
+    var menuExpanded by remember { mutableStateOf(false) }
+    var showCustomRangeDialog by remember { mutableStateOf(false) }
+
+    Row(
+        modifier = Modifier.fillMaxWidth().padding(horizontal = 16.dp, vertical = 4.dp),
+        horizontalArrangement = Arrangement.spacedBy(8.dp),
+        verticalAlignment = Alignment.CenterVertically
+    ) {
+        Box {
+            OutlinedButton(onClick = { menuExpanded = true }) {
+                Text(transactionDateFilterLabel(currentFilter))
+            }
+            DropdownMenu(expanded = menuExpanded, onDismissRequest = { menuExpanded = false }) {
+                DropdownMenuItem(text = { Text("All transactions") }, onClick = { menuExpanded = false; onClear() })
+                DropdownMenuItem(
+                    text = { Text("This month") },
+                    onClick = { menuExpanded = false; onSelectMonth(YearMonth.now()) }
+                )
+                DropdownMenuItem(
+                    text = { Text("Last month") },
+                    onClick = { menuExpanded = false; onSelectMonth(YearMonth.now().minusMonths(1)) }
+                )
+                DropdownMenuItem(
+                    text = { Text("Custom range…") },
+                    onClick = { menuExpanded = false; showCustomRangeDialog = true }
+                )
+            }
+        }
+        if (currentFilter !is TransactionDateFilter.All) {
+            TextButton(onClick = onClear) { Text("Reset") }
+        }
+    }
+
+    if (showCustomRangeDialog) {
+        CustomDateRangeDialog(
+            onConfirm = { startMillis, endExclusiveMillis ->
+                onSelectCustomRange(startMillis, endExclusiveMillis)
+                showCustomRangeDialog = false
+            },
+            onDismiss = { showCustomRangeDialog = false }
+        )
+    }
+}
+
+@Composable
+private fun CustomDateRangeDialog(onConfirm: (startMillis: Long, endExclusiveMillis: Long) -> Unit, onDismiss: () -> Unit) {
+    val now = System.currentTimeMillis()
+    var startMillis by remember { mutableStateOf(now) }
+    // The end date the user picks is inclusive; the filter itself is half-open, so one day
+    // (in millis) is added only at confirm time - never stored as the displayed value.
+    var endMillis by remember { mutableStateOf(now) }
+
+    AlertDialog(
+        onDismissRequest = onDismiss,
+        title = { Text("Custom date range") },
+        text = {
+            Column(verticalArrangement = Arrangement.spacedBy(12.dp)) {
+                DateField(dateMillis = startMillis, onDateSelected = { startMillis = it }, label = "From")
+                DateField(dateMillis = endMillis, onDateSelected = { endMillis = it }, label = "To")
+            }
+        },
+        confirmButton = {
+            TextButton(
+                onClick = {
+                    val orderedStart = minOf(startMillis, endMillis)
+                    val orderedEnd = maxOf(startMillis, endMillis)
+                    onConfirm(orderedStart, orderedEnd + DAY_IN_MILLIS)
+                }
+            ) { Text(stringResource(R.string.action_ok)) }
+        },
+        dismissButton = { TextButton(onClick = onDismiss) { Text(stringResource(R.string.action_cancel)) } }
+    )
+}
+
+private const val DAY_IN_MILLIS = 24L * 60 * 60 * 1000
 
 @OptIn(ExperimentalFoundationApi::class)
 @Composable
@@ -102,6 +203,12 @@ fun TransactionsScreen(
 
     Column(modifier = modifier.fillMaxSize()) {
         Text("Transactions", style = MaterialTheme.typography.headlineSmall, modifier = Modifier.padding(16.dp))
+        TransactionDateFilterBar(
+            currentFilter = uiState.dateFilter,
+            onSelectMonth = viewModel::setMonthFilter,
+            onSelectCustomRange = viewModel::setCustomRangeFilter,
+            onClear = viewModel::clearDateFilter
+        )
         Box(modifier = Modifier.fillMaxSize().weight(1f)) {
             when {
                 uiState.isLoading -> {

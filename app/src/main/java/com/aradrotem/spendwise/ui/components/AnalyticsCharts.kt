@@ -2,6 +2,7 @@ package com.aradrotem.spendwise.ui.components
 
 import androidx.compose.foundation.Canvas
 import androidx.compose.foundation.background
+import androidx.compose.foundation.clickable
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
@@ -10,12 +11,17 @@ import androidx.compose.foundation.layout.fillMaxHeight
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.height
 import androidx.compose.foundation.layout.heightIn
+import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.layout.width
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
+import androidx.compose.runtime.getValue
+import androidx.compose.runtime.mutableStateOf
+import androidx.compose.runtime.remember
+import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.geometry.Offset
@@ -124,7 +130,8 @@ fun IncomeExpenseBarChart(
 }
 
 // Single-series bar chart, reused for both the monthly spending trend and a selected category's
-// trend - both are exactly "one value per month".
+// trend - both are exactly "one value per month". Delegates to LabeledBarChart, the label-agnostic
+// version also used by the weekday/cumulative-spending charts (Step 19).
 @Composable
 fun SingleSeriesBarChart(
     months: List<YearMonth>,
@@ -132,7 +139,29 @@ fun SingleSeriesBarChart(
     barColor: Color,
     modifier: Modifier = Modifier
 ) {
+    LabeledBarChart(
+        labels = months.map { formatMonthShort(it) },
+        valuesCents = valuesCents,
+        barColor = barColor,
+        modifier = modifier
+    )
+}
+
+// Generic single-series bar chart keyed by arbitrary String labels rather than months, so the same
+// component serves weekday-of-spending and cumulative/day-of-month charts without forcing a
+// YearMonth axis on data that isn't month-shaped. Tapping a bar reveals its exact label/value
+// below the chart (Step 19 Part 28) - a Text row rather than a floating tooltip, so it plays nicely
+// with TalkBack and never gets clipped at screen edges.
+@Composable
+fun LabeledBarChart(
+    labels: List<String>,
+    valuesCents: List<Long>,
+    barColor: Color,
+    modifier: Modifier = Modifier,
+    barWidth: androidx.compose.ui.unit.Dp = 20.dp
+) {
     val maxValue = valuesCents.maxOrNull()?.coerceAtLeast(1L) ?: 1L
+    var selectedIndex by remember(labels) { mutableStateOf<Int?>(null) }
 
     Column(modifier = modifier.fillMaxWidth()) {
         Row(
@@ -140,17 +169,25 @@ fun SingleSeriesBarChart(
             horizontalArrangement = Arrangement.SpaceEvenly,
             verticalAlignment = Alignment.Bottom
         ) {
-            months.indices.forEach { index ->
+            labels.indices.forEach { index ->
                 ChartBar(
                     fraction = valuesCents[index].toFloat() / maxValue.toFloat(),
                     color = barColor,
-                    contentDescription = "${formatMonthShort(months[index])}: ${formatAmountInCents(valuesCents[index])}",
-                    width = 20.dp
+                    contentDescription = "${labels[index]}: ${formatAmountInCents(valuesCents[index])}",
+                    width = barWidth,
+                    onClick = { selectedIndex = if (selectedIndex == index) null else index }
                 )
             }
         }
         Row(modifier = Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.SpaceEvenly) {
-            months.forEach { month -> Text(formatMonthShort(month), style = MaterialTheme.typography.labelSmall) }
+            labels.forEach { label -> Text(label, style = MaterialTheme.typography.labelSmall) }
+        }
+        selectedIndex?.let { index ->
+            Text(
+                text = "${labels[index]}: ${formatAmountInCents(valuesCents[index])}",
+                style = MaterialTheme.typography.bodyMedium,
+                modifier = Modifier.padding(top = 4.dp)
+            )
         }
     }
 }
@@ -158,9 +195,16 @@ fun SingleSeriesBarChart(
 // A single bar: a fixed-width Box whose height is a fraction of its parent's height, floored to a
 // thin visible sliver so a genuine zero value is still represented as "present, but empty" rather
 // than invisible. Carries its own content description so the exact value is always available to
-// accessibility services even though the bar itself is only a colored rectangle.
+// accessibility services even though the bar itself is only a colored rectangle. Clickable so the
+// exact value can also be revealed visually (see LabeledBarChart's selectedIndex).
 @Composable
-private fun ChartBar(fraction: Float, color: Color, contentDescription: String, width: androidx.compose.ui.unit.Dp = 14.dp) {
+private fun ChartBar(
+    fraction: Float,
+    color: Color,
+    contentDescription: String,
+    width: androidx.compose.ui.unit.Dp = 14.dp,
+    onClick: (() -> Unit)? = null
+) {
     val clamped = fraction.coerceIn(0f, 1f)
     Box(
         modifier = Modifier
@@ -169,6 +213,7 @@ private fun ChartBar(fraction: Float, color: Color, contentDescription: String, 
             .heightIn(min = 2.dp)
             .background(color, shape = RoundedCornerShape(topStart = 2.dp, topEnd = 2.dp))
             .semantics { this.contentDescription = contentDescription }
+            .let { if (onClick != null) it.clickable(onClick = onClick) else it }
     )
 }
 

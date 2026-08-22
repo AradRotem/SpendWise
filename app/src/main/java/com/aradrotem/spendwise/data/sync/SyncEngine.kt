@@ -78,6 +78,13 @@ class SyncEngine(
         val watermark = watermarkStore.getWatermark(adapter.entityType)
         val changed = firestoreClient.queryChangedSince(adapter.collectionPath, watermark)
         var maxSeen = watermark
+        // True once any row in this pull couldn't be applied yet (see
+        // EntitySyncAdapter.applyRemoteUpsert). When that happens the watermark below is
+        // deliberately NOT advanced, so this entire batch - including the deferred row and
+        // anything after it - is re-fetched and retried on the next sync. Re-applying the
+        // already-succeeded rows in that retry is safe: applyRemoteUpsert is an idempotent
+        // upsert keyed by syncId either way.
+        var hasDeferredRows = false
 
         for (doc in changed) {
             if (doc.serverTimeMillis > maxSeen) maxSeen = doc.serverTimeMillis
@@ -104,6 +111,10 @@ class SyncEngine(
             }
 
             val localId = adapter.applyRemoteUpsert(doc.docId, doc.data, existingMeta?.localId)
+            if (localId == null) {
+                hasDeferredRows = true
+                continue
+            }
             syncMetadataDao.upsert(
                 SyncMetadataEntity(
                     entityType = adapter.entityType.tag,
@@ -116,7 +127,9 @@ class SyncEngine(
             )
         }
 
-        watermarkStore.setWatermark(adapter.entityType, maxSeen)
+        if (!hasDeferredRows) {
+            watermarkStore.setWatermark(adapter.entityType, maxSeen)
+        }
     }
 
     companion object {

@@ -32,11 +32,12 @@ class GroupExpenseSyncAdapter(
         )
     }
 
-    override suspend fun applyRemoteUpsert(syncId: String, data: Map<String, Any?>, existingLocalId: Long?): Long {
+    override suspend fun applyRemoteUpsert(syncId: String, data: Map<String, Any?>, existingLocalId: Long?): Long? {
         val groupId = resolver.localIdFor(SyncEntityType.GROUP, data["groupSyncId"] as? String)
         val paidByMemberId = resolver.localIdFor(SyncEntityType.GROUP_MEMBER, data["paidByMemberSyncId"] as? String)
-        checkNotNull(groupId) { "Group for expense $syncId not yet available locally" }
-        checkNotNull(paidByMemberId) { "Payer member for expense $syncId not yet available locally" }
+        // Defer rather than throw if the parent group or payer member isn't locally available
+        // yet - see EntitySyncAdapter.applyRemoteUpsert / RecurringExceptionSyncAdapter.
+        if (groupId == null || paidByMemberId == null) return null
         val entity = GroupExpenseEntity(
             id = existingLocalId ?: 0,
             groupId = groupId,

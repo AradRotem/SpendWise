@@ -15,7 +15,16 @@ interface EntitySyncAdapter<T> {
 
     // Applies a remote upsert. If existingLocalId is non-null, that local row is updated in
     // place; otherwise a new local row is inserted. Returns the (possibly newly created) local id.
-    suspend fun applyRemoteUpsert(syncId: String, data: Map<String, Any?>, existingLocalId: Long?): Long
+    //
+    // Returns null when this row cannot be applied yet because it references a parent entity
+    // (e.g. a recurring plan, a group, a group member) that hasn't been synced onto this device
+    // yet - remote data can legitimately arrive out of dependency order (a different device's
+    // push, a watermark that's temporarily out of step with local state, etc). The caller
+    // (SyncEngine.pullAdapter) treats null as "defer": the row is skipped for now, the pull
+    // watermark is held back so it's retried on a later sync once the parent is available, and
+    // nothing else in this sync pass is aborted. Implementations must never throw for a missing
+    // parent - only for a genuine unrecoverable failure.
+    suspend fun applyRemoteUpsert(syncId: String, data: Map<String, Any?>, existingLocalId: Long?): Long?
 
     suspend fun applyRemoteDelete(localId: Long)
 }

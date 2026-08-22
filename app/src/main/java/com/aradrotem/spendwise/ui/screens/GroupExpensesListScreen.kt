@@ -25,6 +25,7 @@ import androidx.compose.material3.Text
 import androidx.compose.material3.TextButton
 import androidx.compose.material3.TopAppBar
 import androidx.compose.runtime.Composable
+import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.getValue
 import androidx.lifecycle.compose.collectAsStateWithLifecycle
 import androidx.compose.runtime.mutableStateOf
@@ -43,6 +44,7 @@ import androidx.lifecycle.viewmodel.compose.viewModel
 import com.aradrotem.spendwise.R
 import com.aradrotem.spendwise.SpendWiseApplication
 import com.aradrotem.spendwise.data.local.ExpenseGroupEntity
+import com.aradrotem.spendwise.domain.GroupInvitation
 import com.aradrotem.spendwise.ui.format.formatAmountInCents
 
 @OptIn(ExperimentalMaterial3Api::class)
@@ -57,10 +59,25 @@ fun GroupExpensesListScreen(
         factory = GroupsListViewModel.factory(
             (LocalContext.current.applicationContext as SpendWiseApplication).repositories.groupExpenseRepository
         )
+    ),
+    app: SpendWiseApplication = LocalContext.current.applicationContext as SpendWiseApplication,
+    invitationsViewModel: IncomingInvitationsViewModel = viewModel(
+        factory = IncomingInvitationsViewModel.factory(
+            app.repositories.groupCloudRepository,
+            app.authRepository,
+            app.sharedGroupSyncEngine
+        )
     )
 ) {
     val uiState by viewModel.uiState.collectAsStateWithLifecycle()
+    val invitationsUiState by invitationsViewModel.uiState.collectAsStateWithLifecycle()
     var groupPendingDelete by remember { mutableStateOf<ExpenseGroupEntity?>(null) }
+
+    // Step 19: refresh shared-group membership/data on every entry to this screen. Room's existing
+    // Flow-based observeGroups already shows cached data immediately - this only runs the network
+    // pull in the background, same "show cached, sync in background, let Flow update the UI"
+    // pattern as the rest of the app.
+    LaunchedEffect(Unit) { app.sharedGroupSyncEngine.syncAll() }
 
     Scaffold(
         modifier = modifier,
@@ -85,7 +102,7 @@ fun GroupExpensesListScreen(
                 contentAlignment = Alignment.Center
             ) { CircularProgressIndicator() }
 
-            uiState.items.isEmpty() -> Box(
+            uiState.items.isEmpty() && invitationsUiState.invitations.isEmpty() -> Box(
                 modifier = Modifier.padding(innerPadding).fillMaxSize(),
                 contentAlignment = Alignment.Center
             ) { EmptyGroupsState(onAddGroup) }
@@ -98,6 +115,19 @@ fun GroupExpensesListScreen(
                 contentPadding = PaddingValues(start = 16.dp, end = 16.dp, top = 16.dp, bottom = 96.dp),
                 verticalArrangement = Arrangement.spacedBy(12.dp)
             ) {
+                if (invitationsUiState.invitations.isNotEmpty()) {
+                    item {
+                        PendingInvitationsSection(
+                            invitations = invitationsUiState.invitations,
+                            actionError = invitationsUiState.actionError,
+                            onAccept = invitationsViewModel::accept,
+                            onDecline = invitationsViewModel::decline
+                        )
+                    }
+                }
+                if (uiState.items.isEmpty()) {
+                    item { EmptyGroupsState(onAddGroup) }
+                }
                 items(uiState.items, key = { it.group.id }) { item ->
                     GroupSummaryCard(
                         item = item,
@@ -119,6 +149,40 @@ fun GroupExpensesListScreen(
             },
             onDismiss = { groupPendingDelete = null }
         )
+    }
+}
+
+// Step 19 Part 5: invitations the current user received, addressed to their signed-in email.
+// Accept/decline are optimistic - the list updates itself via observeIncomingInvitations once
+// Firestore reflects the status change, so there's no local "pending" state to manage here.
+@Composable
+private fun PendingInvitationsSection(
+    invitations: List<GroupInvitation>,
+    actionError: String?,
+    onAccept: (GroupInvitation) -> Unit,
+    onDecline: (GroupInvitation) -> Unit
+) {
+    Column(verticalArrangement = Arrangement.spacedBy(8.dp)) {
+        Text("Pending invitations", style = MaterialTheme.typography.titleMedium)
+        // Previously silently dropped: an accept/decline failure (e.g. a permission error) left
+        // the user with zero feedback and an invitation that just never resolved.
+        actionError?.let { Text(it, color = MaterialTheme.colorScheme.error, style = MaterialTheme.typography.bodySmall) }
+        invitations.forEach { invitation ->
+            Card(modifier = Modifier.fillMaxWidth()) {
+                Column(modifier = Modifier.padding(16.dp), verticalArrangement = Arrangement.spacedBy(8.dp)) {
+                    Text("\"${invitation.groupName}\"", style = MaterialTheme.typography.titleSmall)
+                    Text(
+                        "Invited by ${invitation.inviterEmail}",
+                        style = MaterialTheme.typography.bodySmall,
+                        color = MaterialTheme.colorScheme.onSurfaceVariant
+                    )
+                    Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
+                        TextButton(onClick = { onAccept(invitation) }) { Text("Accept") }
+                        TextButton(onClick = { onDecline(invitation) }) { Text("Decline") }
+                    }
+                }
+            }
+        }
     }
 }
 

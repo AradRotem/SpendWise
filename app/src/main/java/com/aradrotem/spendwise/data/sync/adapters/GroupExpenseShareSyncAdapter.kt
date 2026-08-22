@@ -25,14 +25,18 @@ class GroupExpenseShareSyncAdapter(
         )
     }
 
-    override suspend fun applyRemoteUpsert(syncId: String, data: Map<String, Any?>, existingLocalId: Long?): Long {
+    override suspend fun applyRemoteUpsert(syncId: String, data: Map<String, Any?>, existingLocalId: Long?): Long? {
         val expenseId = resolver.localIdFor(SyncEntityType.GROUP_EXPENSE, data["groupExpenseSyncId"] as? String)
         val memberId = resolver.localIdFor(SyncEntityType.GROUP_MEMBER, data["memberSyncId"] as? String)
-        checkNotNull(expenseId) { "Expense for share $syncId not yet available locally" }
-        checkNotNull(memberId) { "Member for share $syncId not yet available locally" }
+        // Defer rather than throw if the parent expense or member isn't locally available yet -
+        // see EntitySyncAdapter.applyRemoteUpsert / RecurringExceptionSyncAdapter. Also defer (do
+        // not crash) if the resolver claims the expense exists but the local row is actually
+        // gone - a real but non-fatal inconsistency, safest handled the same way as "not yet
+        // available" rather than throwing.
+        if (expenseId == null || memberId == null) return null
         if (existingLocalId != null) return existingLocalId // shares are replaced wholesale by the expense adapter, not individually updated
         val existingShares = dao.getSharesForExpense(expenseId)
-        val expense = dao.getById(expenseId) ?: error("Expense $expenseId missing for share $syncId")
+        val expense = dao.getById(expenseId) ?: return null
         val shareAmountCents = (data["shareAmountCents"] as Number).toLong()
         val updatedShares = existingShares.filterNot { it.memberId == memberId } +
             GroupExpenseShareEntity(expenseId = expenseId, memberId = memberId, shareAmountCents = shareAmountCents)

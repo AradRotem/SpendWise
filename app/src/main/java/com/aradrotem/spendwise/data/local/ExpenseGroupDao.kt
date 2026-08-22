@@ -27,4 +27,10 @@ interface ExpenseGroupDao {
 
     @Query("SELECT * FROM expense_groups WHERE id = :id")
     suspend fun getById(id: Long): ExpenseGroupEntity?
+
+    // Step 19: the local mirror row for a real shared group, keyed by its canonical cloud
+    // identity - used by SharedGroupSyncEngine to find (or know it must create) the local row for
+    // a groupSyncId discovered via users/{uid}/groupMemberships.
+    @Query("SELECT * FROM expense_groups WHERE groupSyncId = :groupSyncId")
+    suspend fun getByGroupSyncId(groupSyncId: String): ExpenseGroupEntity?
 }

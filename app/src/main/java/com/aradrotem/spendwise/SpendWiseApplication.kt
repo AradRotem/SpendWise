@@ -10,6 +10,14 @@ import com.aradrotem.spendwise.data.auth.FirebaseUnavailableUserProfileRepositor
 import com.aradrotem.spendwise.data.auth.FirestoreUserProfileRepository
 import com.aradrotem.spendwise.data.auth.UserProfileRepository
 import com.aradrotem.spendwise.data.local.SpendWiseDatabase
+import com.aradrotem.spendwise.data.network.ExchangeRateApiFactory
+import com.aradrotem.spendwise.data.notifications.NotificationCheckWorker
+import com.aradrotem.spendwise.data.notifications.NotificationChannels
+import com.aradrotem.spendwise.data.notifications.NotificationPreferencesStore
+import com.aradrotem.spendwise.data.notifications.SharedPrefsNotificationPreferencesStore
+import com.aradrotem.spendwise.data.notifications.SystemNotificationSender
+import com.aradrotem.spendwise.data.sync.AndroidLogSyncDiagnostics
+import com.aradrotem.spendwise.data.sync.SharedGroupSyncEngine
 import com.aradrotem.spendwise.data.receipt.FirebaseReceiptStorageRepository
 import com.aradrotem.spendwise.data.receipt.FirebaseUnavailableReceiptStorageRepository
 import com.aradrotem.spendwise.data.receipt.ReceiptStorageRepository
@@ -32,8 +40,13 @@ import com.google.firebase.auth.FirebaseAuth
 import com.google.firebase.firestore.FirebaseFirestore
 import com.aradrotem.spendwise.data.repository.BudgetRepository
 import com.aradrotem.spendwise.data.repository.CategoryRepository
+import com.aradrotem.spendwise.data.repository.ExchangeRateRepository
+import com.aradrotem.spendwise.data.repository.FirestoreGroupCloudRepository
+import com.aradrotem.spendwise.data.repository.GroupCloudRepository
 import com.aradrotem.spendwise.data.repository.GroupExpenseRepository
+import com.aradrotem.spendwise.data.repository.NotificationRepository
 import com.aradrotem.spendwise.data.repository.ReceiptRepository
+import com.aradrotem.spendwise.data.repository.RetrofitExchangeRateRepository
 import com.aradrotem.spendwise.data.repository.RecurringOccurrenceExceptionRepository
 import com.aradrotem.spendwise.data.repository.RecurringPaymentRepository
 import com.aradrotem.spendwise.data.repository.TransactionRepository
@@ -66,8 +79,22 @@ class RepositoryBundle(database: SpendWiseDatabase, context: android.content.Con
     val recurringOccurrenceManager: RecurringOccurrenceManager =
         RecurringOccurrenceManager(transactionRepository, recurringPaymentRepository, recurringOccurrenceExceptionRepository)
     val groupExpenseRepository: GroupExpenseRepository = GroupExpenseRepository(
-        database.expenseGroupDao(), database.groupMemberDao(), database.groupExpenseDao(), syncMetadataDao
+        database.expenseGroupDao(), database.groupMemberDao(), database.groupExpenseDao(), syncMetadataDao,
+        database.groupExpensePendingDeletionDao()
     )
+    val notificationRepository: NotificationRepository = NotificationRepository(database.notificationStateDao())
+    val notificationPreferencesStore: NotificationPreferencesStore = SharedPrefsNotificationPreferencesStore(context, uid)
+    val exchangeRateRepository: ExchangeRateRepository =
+        RetrofitExchangeRateRepository(ExchangeRateApiFactory.create(), database.cachedExchangeRateDao())
+
+    // Null for the legacy/pre-auth database and for builds without google-services.json - real
+    // shared groups are inherently cross-account and have no offline-only equivalent, same
+    // nullability rule as syncEngine/receiptRepository above.
+    val groupCloudRepository: GroupCloudRepository? = if (FirebaseAvailability.isConfigured(context)) {
+        FirestoreGroupCloudRepository(FirebaseFirestore.getInstance())
+    } else {
+        null
+    }
 
     // Only meaningful for a real signed-in account with Firebase configured - null for the
     // legacy/pre-auth database and for builds without google-services.json (see
@@ -161,8 +188,24 @@ class SpendWiseApplication : Application() {
 
     private val connectivityObserver by lazy { ConnectivityObserver(this) }
 
+    // Recomputed from the CURRENT repositories bundle on every access (a plain get(), not a
+    // stored val) so it always targets whichever account's database is active - authRepository
+    // itself is app-scoped/never swapped, but groupExpenseRepository/groupCloudRepository/
+    // notificationPreferencesStore come from RepositoryBundle and change on every account switch.
+    val sharedGroupSyncEngine: SharedGroupSyncEngine
+        get() = SharedGroupSyncEngine(
+            groupExpenseRepository = repositories.groupExpenseRepository,
+            groupCloudRepository = repositories.groupCloudRepository,
+            authRepository = authRepository,
+            notificationSender = SystemNotificationSender(this),
+            notificationPreferencesStore = repositories.notificationPreferencesStore,
+            diagnostics = AndroidLogSyncDiagnostics()
+        )
+
     override fun onCreate() {
         super.onCreate()
+        NotificationChannels.ensureCreated(this)
+        NotificationCheckWorker.enqueuePeriodic(this)
         rebuildForUid(null, notifyRecreate = false)
         applicationScope.launch {
             authSessionCoordinator.run()
@@ -184,6 +227,11 @@ class SpendWiseApplication : Application() {
                 receipts.retryPendingDeletions()
             }
         }
+        // Step 19: the same three triggers (resume, connectivity regained, manual "Sync now" -
+        // see AccountScreen) also drive shared-group synchronization. sharedGroupSyncEngine itself
+        // no-ops when groupCloudRepository/currentUid are unavailable (legacy database, no
+        // Firebase, signed out), so this is always safe to call.
+        applicationScope.launch { sharedGroupSyncEngine.syncAll() }
     }
 
     // Rebuilds the repository bundle from the database for [uid] (null = legacy/no-account

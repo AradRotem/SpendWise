@@ -26,7 +26,8 @@ class SettingsScreenTest {
                 onNavigateToCategories = {},
                 onNavigateToRecurringPayments = {},
                 onNavigateToReportsAnalytics = onNavigateToReportsAnalytics,
-                onNavigateToGroupExpenses = {}
+                onNavigateToGroupExpenses = {},
+                onNavigateToAccount = {}
             )
         }
     }
