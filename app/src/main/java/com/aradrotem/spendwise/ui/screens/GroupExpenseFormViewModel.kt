@@ -10,6 +10,7 @@ import com.aradrotem.spendwise.domain.GroupExpenseSplit
 import com.aradrotem.spendwise.ui.format.formatAmountInCents
 import com.aradrotem.spendwise.ui.format.hasTooManyDecimalPlaces
 import com.aradrotem.spendwise.ui.format.parseAmountToCents
+import com.aradrotem.spendwise.ui.format.validateAmount
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.SharingStarted
 import kotlinx.coroutines.flow.StateFlow
@@ -115,13 +116,7 @@ class GroupExpenseFormViewModel(
 
         val amountCents = parseAmountToCents(state.amountText)
         val titleError = if (state.title.isBlank()) "Title is required" else null
-        val amountError = when {
-            state.amountText.isBlank() -> "Amount is required"
-            hasTooManyDecimalPlaces(state.amountText) -> "Enter an amount with up to 2 decimal places."
-            amountCents == null -> "Enter a valid amount"
-            amountCents <= 0L -> "Amount must be greater than zero"
-            else -> null
-        }
+        val amountError = validateAmount(state.amountText, amountCents)
         val payerError = if (state.payerMemberId == null) "Select who paid" else null
         val participantsError = if (state.participantMemberIds.isEmpty()) "At least one participant is required" else null
 

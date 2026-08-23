@@ -11,11 +11,13 @@ import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.height
+import androidx.compose.foundation.layout.imePadding
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.rememberScrollState
 import androidx.compose.foundation.text.KeyboardOptions
 import androidx.compose.foundation.verticalScroll
+import androidx.compose.material3.AlertDialog
 import androidx.compose.material3.Button
 import androidx.compose.material3.CircularProgressIndicator
 import androidx.compose.material3.ExperimentalMaterial3Api
@@ -79,6 +81,7 @@ fun AddTransactionScreen(
     val coroutineScope = rememberCoroutineScope()
     val receiptImageProcessor = remember { ReceiptImageProcessor(context.applicationContext) }
     var pendingCameraUri by remember { mutableStateOf<Uri?>(null) }
+    var showRemoveReceiptConfirm by remember { mutableStateOf(false) }
 
     fun processPickedImage(uri: Uri) {
         coroutineScope.launch {
@@ -138,9 +141,10 @@ fun AddTransactionScreen(
         Column(
             modifier = Modifier
                 .padding(innerPadding)
-                .padding(16.dp)
                 .fillMaxSize()
-                .verticalScroll(rememberScrollState()),
+                .verticalScroll(rememberScrollState())
+                .imePadding()
+                .padding(16.dp),
             verticalArrangement = Arrangement.spacedBy(16.dp)
         ) {
             if (uiState.isGeneratedOccurrence) {
@@ -230,9 +234,19 @@ fun AddTransactionScreen(
                     galleryLauncher.launch(PickVisualMediaRequest(ActivityResultContracts.PickVisualMedia.ImageOnly))
                 },
                 onView = { transactionId?.let(onViewReceipt) },
-                onRemove = viewModel::onRemoveReceipt,
+                onRemove = { showRemoveReceiptConfirm = true },
                 onDismissError = viewModel::dismissReceiptError
             )
+
+            if (showRemoveReceiptConfirm) {
+                RemoveReceiptDialog(
+                    onConfirm = {
+                        viewModel.onRemoveReceipt()
+                        showRemoveReceiptConfirm = false
+                    },
+                    onDismiss = { showRemoveReceiptConfirm = false }
+                )
+            }
 
             uiState.saveError?.let { error ->
                 Text(error, color = MaterialTheme.colorScheme.error)
@@ -303,6 +317,21 @@ private fun ReceiptSection(
             }
         }
     }
+}
+
+@Composable
+private fun RemoveReceiptDialog(onConfirm: () -> Unit, onDismiss: () -> Unit) {
+    AlertDialog(
+        onDismissRequest = onDismiss,
+        title = { Text("Remove receipt?") },
+        text = { Text("The attached receipt image will be removed from this transaction.") },
+        confirmButton = {
+            TextButton(onClick = onConfirm) { Text("Remove", color = MaterialTheme.colorScheme.error) }
+        },
+        dismissButton = {
+            TextButton(onClick = onDismiss) { Text("Cancel") }
+        }
+    )
 }
 
 // A fresh app-private file exposed only via FileProvider (see res/xml/file_paths.xml), handed to

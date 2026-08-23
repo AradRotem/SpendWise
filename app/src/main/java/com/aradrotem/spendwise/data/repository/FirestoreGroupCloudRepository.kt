@@ -153,17 +153,7 @@ class FirestoreGroupCloudRepository(private val firestore: FirebaseFirestore) : 
     override fun observeMembers(groupId: String): Flow<List<GroupCloudMember>> = callbackFlow {
         val registration = membersCollection(groupId).addSnapshotListener { snapshot, error ->
             if (error != null) Log.w(TAG, "observeMembers listener error: ${error.code}", error)
-            val members = snapshot?.documents?.mapNotNull { doc ->
-                val role = doc.getString("role")?.let { runCatching { GroupRole.valueOf(it) }.getOrNull() } ?: return@mapNotNull null
-                GroupCloudMember(
-                    uid = doc.id,
-                    displayName = doc.getString("displayName") ?: "",
-                    email = doc.getString("email") ?: "",
-                    role = role,
-                    joinedAtEpochMillis = doc.getTimestamp("joinedAt")?.toDate()?.time ?: 0L
-                )
-            }.orEmpty()
-            trySend(members)
+            trySend(snapshot?.documents?.mapNotNull { it.toGroupCloudMember() }.orEmpty())
         }
         awaitClose { registration.remove() }
     }
@@ -216,21 +206,25 @@ class FirestoreGroupCloudRepository(private val firestore: FirebaseFirestore) : 
     override suspend fun getMembersOnce(groupId: String): Result<List<GroupCloudMember>> = runCatching {
         val result = membersCollection(groupId).get().await()
         Log.d(TAG, "getMembersOnce($groupId): found ${result.documents.size} member doc(s)")
-        result.documents.mapNotNull { doc ->
-            val role = doc.getString("role")?.let { runCatching { GroupRole.valueOf(it) }.getOrNull() } ?: return@mapNotNull null
-            GroupCloudMember(
-                uid = doc.id,
-                displayName = doc.getString("displayName") ?: "",
-                email = doc.getString("email") ?: "",
-                role = role,
-                joinedAtEpochMillis = doc.getTimestamp("joinedAt")?.toDate()?.time ?: 0L
-            )
-        }
+        result.documents.mapNotNull { it.toGroupCloudMember() }
     }.onFailure { Log.w(TAG, "getMembersOnce($groupId) failed", it) }
 
     override suspend fun getExpensesOnce(groupId: String): Result<List<RemoteGroupExpense>> = runCatching {
         expensesCollection(groupId).get().await().documents.mapNotNull { it.toRemoteExpense() }
     }.onFailure { Log.w(TAG, "getExpensesOnce($groupId) failed", it) }
+
+    // Shared by observeMembers (live listener) and getMembersOnce (one-shot get) so the two
+    // never drift apart on how a member document's fields are mapped/defaulted.
+    private fun DocumentSnapshot.toGroupCloudMember(): GroupCloudMember? {
+        val role = getString("role")?.let { runCatching { GroupRole.valueOf(it) }.getOrNull() } ?: return null
+        return GroupCloudMember(
+            uid = id,
+            displayName = getString("displayName") ?: "",
+            email = getString("email") ?: "",
+            role = role,
+            joinedAtEpochMillis = getTimestamp("joinedAt")?.toDate()?.time ?: 0L
+        )
+    }
 
     private fun DocumentSnapshot.toInvitation(): GroupInvitation? {
         if (!exists()) return null

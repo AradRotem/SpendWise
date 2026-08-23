@@ -13,8 +13,8 @@ import com.aradrotem.spendwise.data.repository.TransactionRepository
 import com.aradrotem.spendwise.domain.RecurringOccurrenceManager
 import com.aradrotem.spendwise.domain.RecurringPaymentGenerator
 import com.aradrotem.spendwise.ui.format.formatAmountInCents
-import com.aradrotem.spendwise.ui.format.hasTooManyDecimalPlaces
 import com.aradrotem.spendwise.ui.format.parseAmountToCents
+import com.aradrotem.spendwise.ui.format.validateAmount
 import kotlinx.coroutines.ExperimentalCoroutinesApi
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.SharingStarted
@@ -170,13 +170,7 @@ class AddRecurringPlanViewModel(
         val endDateMillis = if (state.hasEndDate) state.endDateMillis else null
 
         val titleError = if (state.title.isBlank()) "Title is required" else null
-        val amountError = when {
-            state.amountText.isBlank() -> "Amount is required"
-            hasTooManyDecimalPlaces(state.amountText) -> "Enter an amount with up to 2 decimal places."
-            amountInCents == null -> "Enter a valid amount"
-            amountInCents <= 0L -> "Amount must be greater than zero"
-            else -> null
-        }
+        val amountError = validateAmount(state.amountText, amountInCents)
         val categoryError = if (state.category == null) "Category is required" else null
         val preferredDayError = when {
             preferredDay == null -> "Enter a day between 1 and 31"
@@ -237,13 +231,7 @@ class AddRecurringPlanViewModel(
         val installmentCount = state.installmentCountText.toIntOrNull()
 
         val titleError = if (state.title.isBlank()) "Title is required" else null
-        val totalAmountError = when {
-            state.totalAmountText.isBlank() -> "Total amount is required"
-            hasTooManyDecimalPlaces(state.totalAmountText) -> "Enter an amount with up to 2 decimal places."
-            totalAmountInCents == null -> "Enter a valid amount"
-            totalAmountInCents <= 0L -> "Total amount must be greater than zero"
-            else -> null
-        }
+        val totalAmountError = validateAmount(state.totalAmountText, totalAmountInCents, fieldLabel = "Total amount")
         val categoryError = if (state.category == null) "Category is required" else null
         val installmentCountError = when {
             state.installmentCountText.isBlank() -> "Number of installments is required"

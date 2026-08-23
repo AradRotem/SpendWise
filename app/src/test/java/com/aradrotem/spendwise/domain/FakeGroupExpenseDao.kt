@@ -47,6 +47,8 @@ class FakeGroupExpenseDao : GroupExpenseDao() {
 
     override suspend fun getSharesForExpense(expenseId: Long): List<GroupExpenseShareEntity> = shares.filter { it.expenseId == expenseId }
 
+    override suspend fun getShareById(id: Long): GroupExpenseShareEntity? = shares.firstOrNull { it.id == id }
+
     override fun observeSharesByGroup(groupId: Long): Flow<List<GroupExpenseShareEntity>> {
         val expenseIds = expenses.filter { it.groupId == groupId }.map { it.id }.toSet()
         return flowOf(shares.filter { it.expenseId in expenseIds })

@@ -33,6 +33,8 @@ class FakeBudgetDao : BudgetDao {
     override suspend fun findByCategory(categoryName: String): BudgetEntity? =
         rows.firstOrNull { it.categoryName == categoryName }
 
+    override suspend fun getById(id: Long): BudgetEntity? = rows.firstOrNull { it.id == id }
+
     override suspend fun deleteByCategory(categoryName: String) {
         rows.removeAll { it.categoryName == categoryName }
     }

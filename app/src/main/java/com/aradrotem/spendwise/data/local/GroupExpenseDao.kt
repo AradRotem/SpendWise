@@ -54,6 +54,9 @@ abstract class GroupExpenseDao {
     @Query("SELECT * FROM group_expense_shares WHERE expenseId = :expenseId")
     abstract suspend fun getSharesForExpense(expenseId: Long): List<GroupExpenseShareEntity>
 
+    @Query("SELECT * FROM group_expense_shares WHERE id = :id")
+    abstract suspend fun getShareById(id: Long): GroupExpenseShareEntity?
+
     @Query("SELECT * FROM group_expense_shares WHERE expenseId IN (SELECT id FROM group_expenses WHERE groupId = :groupId)")
     abstract fun observeSharesByGroup(groupId: Long): Flow<List<GroupExpenseShareEntity>>
 

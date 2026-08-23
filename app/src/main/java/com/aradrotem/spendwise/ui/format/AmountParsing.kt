@@ -38,3 +38,17 @@ fun hasTooManyDecimalPlaces(text: String): Boolean {
     val parts = normalized.split(".")
     return parts.size == 2 && parts[1].length > 2
 }
+
+// Shared by every screen that collects a required, positive amount (AddTransactionViewModel,
+// BudgetsViewModel, AddRecurringPlanViewModel's monthly-amount and installment-total fields) so
+// they can't drift apart on validation rules or wording. Callers already need amountInCents
+// themselves (to build the entity being saved), so it's passed in rather than re-parsed here.
+// fieldLabel only varies the blank/zero messages ("Amount" vs "Total amount"); the malformed-input
+// messages are identical everywhere.
+fun validateAmount(text: String, amountInCents: Long?, fieldLabel: String = "Amount"): String? = when {
+    text.isBlank() -> "$fieldLabel is required"
+    hasTooManyDecimalPlaces(text) -> "Enter an amount with up to 2 decimal places."
+    amountInCents == null -> "Enter a valid amount"
+    amountInCents <= 0L -> "$fieldLabel must be greater than zero"
+    else -> null
+}

@@ -5,7 +5,6 @@ import com.aradrotem.spendwise.data.local.CategoryEntity
 import com.aradrotem.spendwise.data.local.TransactionType
 import com.aradrotem.spendwise.data.sync.EntitySyncAdapter
 import com.aradrotem.spendwise.data.sync.SyncEntityType
-import kotlinx.coroutines.flow.first
 
 // Only custom categories ever get marked dirty (see CategoryRepository/SyncStamper) - built-ins
 // are seeded identically and locally on every account, so there's never a built-in row to push,
@@ -16,7 +15,7 @@ class CategorySyncAdapter(private val dao: CategoryDao, uid: String) : EntitySyn
     override val collectionPath = "users/$uid/categories"
 
     override suspend fun loadForPush(localId: Long): Map<String, Any?>? {
-        val category = findById(localId) ?: return null
+        val category = dao.getById(localId) ?: return null
         return mapOf(
             "name" to category.name,
             "normalizedName" to category.normalizedName,
@@ -42,16 +41,6 @@ class CategorySyncAdapter(private val dao: CategoryDao, uid: String) : EntitySyn
     }
 
     override suspend fun applyRemoteDelete(localId: Long) {
-        findById(localId)?.let { dao.deleteCustomCategoryAndReassign(it) }
-    }
-
-    // CategoryDao has no getById; scan both types' current snapshot instead. Category counts are
-    // small (user-managed lists), so this is cheap in practice.
-    private suspend fun findById(localId: Long): CategoryEntity? {
-        for (type in TransactionType.entries) {
-            val list = dao.observeByType(type).first()
-            list.firstOrNull { it.id == localId }?.let { return it }
-        }
-        return null
+        dao.getById(localId)?.let { dao.deleteCustomCategoryAndReassign(it) }
     }
 }

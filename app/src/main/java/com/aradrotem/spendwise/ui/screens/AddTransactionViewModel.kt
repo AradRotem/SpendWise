@@ -14,8 +14,8 @@ import com.aradrotem.spendwise.data.repository.TransactionRepository
 import com.aradrotem.spendwise.domain.RecurringOccurrenceManager
 import com.aradrotem.spendwise.ui.components.transactionPrimaryText
 import com.aradrotem.spendwise.ui.format.formatAmountInCents
-import com.aradrotem.spendwise.ui.format.hasTooManyDecimalPlaces
 import com.aradrotem.spendwise.ui.format.parseAmountToCents
+import com.aradrotem.spendwise.ui.format.validateAmount
 import java.io.File
 import kotlinx.coroutines.CancellationException
 import kotlinx.coroutines.ExperimentalCoroutinesApi
@@ -224,13 +224,7 @@ class AddTransactionViewModel(
 
         val amountInCents = parseAmountToCents(state.amountText)
         val titleError = if (state.isGeneratedOccurrence && state.title.isBlank()) "Title is required" else null
-        val amountError = when {
-            state.amountText.isBlank() -> "Amount is required"
-            hasTooManyDecimalPlaces(state.amountText) -> "Enter an amount with up to 2 decimal places."
-            amountInCents == null -> "Enter a valid amount"
-            amountInCents <= 0L -> "Amount must be greater than zero"
-            else -> null
-        }
+        val amountError = validateAmount(state.amountText, amountInCents)
         val categoryError = if (state.category == null) "Category is required" else null
 
         if (titleError != null || amountError != null || categoryError != null) {

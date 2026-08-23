@@ -6,7 +6,6 @@ import com.aradrotem.spendwise.data.local.RecurringOccurrenceExceptionEntity
 import com.aradrotem.spendwise.data.sync.EntitySyncAdapter
 import com.aradrotem.spendwise.data.sync.SyncEntityType
 import com.aradrotem.spendwise.data.sync.SyncIdResolver
-import kotlinx.coroutines.flow.first
 
 class RecurringExceptionSyncAdapter(
     private val dao: RecurringOccurrenceExceptionDao,
@@ -18,7 +17,7 @@ class RecurringExceptionSyncAdapter(
     override val collectionPath = "users/$uid/recurringOccurrenceExceptions"
 
     override suspend fun loadForPush(localId: Long): Map<String, Any?>? {
-        val exception = findById(localId) ?: return null
+        val exception = dao.getById(localId) ?: return null
         return mapOf(
             "recurringPlanSyncId" to resolver.syncIdFor(SyncEntityType.RECURRING_PLAN, exception.recurringPlanId),
             "scheduledYearMonth" to exception.scheduledYearMonth,
@@ -49,7 +48,4 @@ class RecurringExceptionSyncAdapter(
     }
 
     override suspend fun applyRemoteDelete(localId: Long) = Unit // exceptions are never individually deleted
-
-    private suspend fun findById(localId: Long): RecurringOccurrenceExceptionEntity? =
-        dao.observeAll().first().firstOrNull { it.id == localId }
 }

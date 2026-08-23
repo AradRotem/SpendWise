@@ -35,6 +35,8 @@ class FakeCategoryDao : CategoryDao {
     override suspend fun findByNormalizedNameAndType(normalizedName: String, type: TransactionType): CategoryEntity? =
         rows.firstOrNull { it.normalizedName == normalizedName && it.type == type }
 
+    override suspend fun getById(id: Long): CategoryEntity? = rows.firstOrNull { it.id == id }
+
     override suspend fun reassignTransactionsToOther(categoryName: String, type: TransactionType) = Unit
 
     override suspend fun deleteBudgetForCategory(categoryName: String) = Unit

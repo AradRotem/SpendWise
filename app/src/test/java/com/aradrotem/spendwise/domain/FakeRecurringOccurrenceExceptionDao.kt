@@ -24,6 +24,8 @@ class FakeRecurringOccurrenceExceptionDao : RecurringOccurrenceExceptionDao {
     override suspend fun getForPlan(planId: Long): List<RecurringOccurrenceExceptionEntity> =
         rows.filter { it.recurringPlanId == planId }
 
+    override suspend fun getById(id: Long): RecurringOccurrenceExceptionEntity? = rows.firstOrNull { it.id == id }
+
     override fun observeAll(): Flow<List<RecurringOccurrenceExceptionEntity>> = flowOf(rows.toList())
 
     override suspend fun deleteForPlan(planId: Long) {

@@ -5,7 +5,6 @@ import com.aradrotem.spendwise.data.local.GroupExpenseShareEntity
 import com.aradrotem.spendwise.data.sync.EntitySyncAdapter
 import com.aradrotem.spendwise.data.sync.SyncEntityType
 import com.aradrotem.spendwise.data.sync.SyncIdResolver
-import kotlinx.coroutines.flow.first
 
 class GroupExpenseShareSyncAdapter(
     private val dao: GroupExpenseDao,
@@ -17,7 +16,7 @@ class GroupExpenseShareSyncAdapter(
     override val collectionPath = "users/$uid/groupExpenseShares"
 
     override suspend fun loadForPush(localId: Long): Map<String, Any?>? {
-        val share = findById(localId) ?: return null
+        val share = dao.getShareById(localId) ?: return null
         return mapOf(
             "groupExpenseSyncId" to resolver.syncIdFor(SyncEntityType.GROUP_EXPENSE, share.expenseId),
             "memberSyncId" to resolver.syncIdFor(SyncEntityType.GROUP_MEMBER, share.memberId),
@@ -45,12 +44,9 @@ class GroupExpenseShareSyncAdapter(
     }
 
     override suspend fun applyRemoteDelete(localId: Long) {
-        val share = findById(localId) ?: return
+        val share = dao.getShareById(localId) ?: return
         val expense = dao.getById(share.expenseId) ?: return
         val remainingShares = dao.getSharesForExpense(share.expenseId).filterNot { it.id == localId }
         dao.updateExpenseWithShares(expense, remainingShares)
     }
-
-    private suspend fun findById(localId: Long): GroupExpenseShareEntity? =
-        dao.observeAllShares().first().firstOrNull { it.id == localId }
 }

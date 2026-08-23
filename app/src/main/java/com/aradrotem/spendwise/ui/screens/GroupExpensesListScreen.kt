@@ -162,6 +162,8 @@ private fun PendingInvitationsSection(
     onAccept: (GroupInvitation) -> Unit,
     onDecline: (GroupInvitation) -> Unit
 ) {
+    var invitationPendingDecline by remember { mutableStateOf<GroupInvitation?>(null) }
+
     Column(verticalArrangement = Arrangement.spacedBy(8.dp)) {
         Text("Pending invitations", style = MaterialTheme.typography.titleMedium)
         // Previously silently dropped: an accept/decline failure (e.g. a permission error) left
@@ -178,12 +180,38 @@ private fun PendingInvitationsSection(
                     )
                     Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
                         TextButton(onClick = { onAccept(invitation) }) { Text("Accept") }
-                        TextButton(onClick = { onDecline(invitation) }) { Text("Decline") }
+                        TextButton(onClick = { invitationPendingDecline = invitation }) { Text("Decline") }
                     }
                 }
             }
         }
     }
+
+    invitationPendingDecline?.let { invitation ->
+        DeclineInvitationDialog(
+            groupName = invitation.groupName,
+            onConfirm = {
+                onDecline(invitation)
+                invitationPendingDecline = null
+            },
+            onDismiss = { invitationPendingDecline = null }
+        )
+    }
+}
+
+@Composable
+private fun DeclineInvitationDialog(groupName: String, onConfirm: () -> Unit, onDismiss: () -> Unit) {
+    AlertDialog(
+        onDismissRequest = onDismiss,
+        title = { Text("Decline invitation to \"$groupName\"?") },
+        text = { Text("You'll need a new invitation from the group owner to join later.") },
+        confirmButton = {
+            TextButton(onClick = onConfirm) { Text("Decline", color = MaterialTheme.colorScheme.error) }
+        },
+        dismissButton = {
+            TextButton(onClick = onDismiss) { Text(stringResource(R.string.action_cancel)) }
+        }
+    )
 }
 
 @Composable

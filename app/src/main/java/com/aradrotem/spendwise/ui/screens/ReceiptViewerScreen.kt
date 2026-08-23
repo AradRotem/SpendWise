@@ -1,7 +1,9 @@
 package com.aradrotem.spendwise.ui.screens
 
 import androidx.compose.foundation.gestures.detectTransformGestures
+import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
+import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.padding
 import androidx.compose.material3.CircularProgressIndicator
@@ -26,6 +28,7 @@ import androidx.compose.ui.platform.LocalContext
 import androidx.lifecycle.compose.collectAsStateWithLifecycle
 import androidx.lifecycle.viewmodel.compose.viewModel
 import coil3.compose.AsyncImage
+import coil3.compose.AsyncImagePainter
 import com.aradrotem.spendwise.SpendWiseApplication
 
 @OptIn(ExperimentalMaterial3Api::class)
@@ -70,11 +73,27 @@ fun ReceiptViewerScreen(
 private fun ZoomableReceiptImage(model: Any?, modifier: Modifier = Modifier) {
     var scale by remember { mutableStateOf(1f) }
     var offset by remember { mutableStateOf(Offset.Zero) }
+    // Keyed by model so switching to a different receipt (e.g. once a remote download URL
+    // resolves after a local-cache miss) re-attempts the load rather than staying stuck on a
+    // previous failure.
+    var loadFailed by remember(model) { mutableStateOf(false) }
+
+    if (loadFailed) {
+        Column(
+            modifier = modifier.fillMaxSize(),
+            horizontalAlignment = Alignment.CenterHorizontally,
+            verticalArrangement = Arrangement.Center
+        ) {
+            Text("Couldn't load this receipt image.", color = MaterialTheme.colorScheme.error)
+        }
+        return
+    }
 
     AsyncImage(
         model = model,
         contentDescription = "Receipt, pinch to zoom",
         contentScale = ContentScale.Fit,
+        onState = { state -> loadFailed = state is AsyncImagePainter.State.Error },
         modifier = modifier
             .fillMaxSize()
             .pointerInput(Unit) {

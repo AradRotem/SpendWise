@@ -17,6 +17,9 @@ interface RecurringOccurrenceExceptionDao {
     @Query("SELECT * FROM recurring_occurrence_exceptions WHERE recurringPlanId = :planId")
     suspend fun getForPlan(planId: Long): List<RecurringOccurrenceExceptionEntity>
 
+    @Query("SELECT * FROM recurring_occurrence_exceptions WHERE id = :id")
+    suspend fun getById(id: Long): RecurringOccurrenceExceptionEntity?
+
     // Reactive, all-plans variant for the Recurring Transactions list screen: it needs a live
     // per-plan deleted-occurrence count alongside plans/transactions (see RecurringPlansViewModel)
     // so the Completed-installment display updates immediately after a delete, without a

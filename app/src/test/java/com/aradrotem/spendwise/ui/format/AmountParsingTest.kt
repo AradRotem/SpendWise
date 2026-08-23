@@ -45,4 +45,51 @@ class AmountParsingTest {
         assertEquals("₪0.00", formatAmountInCents(0L))
         assertEquals("₪12.50", formatAmountInCents(1_250L))
     }
+
+    @Test
+    fun validateAmount_blank_returnsRequiredMessage() {
+        assertEquals("Amount is required", validateAmount("", parseAmountToCents("")))
+    }
+
+    @Test
+    fun validateAmount_blank_usesCustomFieldLabel() {
+        assertEquals("Total amount is required", validateAmount("", parseAmountToCents(""), fieldLabel = "Total amount"))
+    }
+
+    @Test
+    fun validateAmount_tooManyDecimalPlaces_returnsSpecificMessage() {
+        val text = "1.234"
+        assertEquals("Enter an amount with up to 2 decimal places.", validateAmount(text, parseAmountToCents(text)))
+    }
+
+    @Test
+    fun validateAmount_malformed_returnsGenericInvalidMessage() {
+        val text = "abc"
+        assertEquals("Enter a valid amount", validateAmount(text, parseAmountToCents(text)))
+    }
+
+    @Test
+    fun validateAmount_zeroOrNegative_returnsGreaterThanZeroMessage() {
+        assertEquals("Amount must be greater than zero", validateAmount("0.00", parseAmountToCents("0.00")))
+    }
+
+    @Test
+    fun validateAmount_zeroOrNegative_usesCustomFieldLabel() {
+        assertEquals(
+            "Total amount must be greater than zero",
+            validateAmount("0.00", parseAmountToCents("0.00"), fieldLabel = "Total amount")
+        )
+    }
+
+    @Test
+    fun validateAmount_valid_returnsNull() {
+        val text = "42.50"
+        assertNull(validateAmount(text, parseAmountToCents(text)))
+    }
+
+    @Test
+    fun validateAmount_acceptsCurrencyPrefixedRoundTrip() {
+        val formatted = formatAmountInCents(4_250L)
+        assertNull(validateAmount(formatted, parseAmountToCents(formatted)))
+    }
 }

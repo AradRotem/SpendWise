@@ -25,6 +25,9 @@ interface BudgetDao {
     @Query("SELECT * FROM budgets WHERE categoryName = :categoryName LIMIT 1")
     suspend fun findByCategory(categoryName: String): BudgetEntity?
 
+    @Query("SELECT * FROM budgets WHERE id = :id")
+    suspend fun getById(id: Long): BudgetEntity?
+
     @Query("DELETE FROM budgets WHERE categoryName = :categoryName")
     suspend fun deleteByCategory(categoryName: String)
 }

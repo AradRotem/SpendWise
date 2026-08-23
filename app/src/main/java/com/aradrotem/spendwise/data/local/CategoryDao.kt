@@ -30,6 +30,9 @@ interface CategoryDao {
     @Query("SELECT * FROM categories WHERE normalizedName = :normalizedName AND type = :type LIMIT 1")
     suspend fun findByNormalizedNameAndType(normalizedName: String, type: TransactionType): CategoryEntity?
 
+    @Query("SELECT * FROM categories WHERE id = :id")
+    suspend fun getById(id: Long): CategoryEntity?
+
     @Query("UPDATE transactions SET category = 'OTHER' WHERE category = :categoryName AND type = :type")
     suspend fun reassignTransactionsToOther(categoryName: String, type: TransactionType)
 

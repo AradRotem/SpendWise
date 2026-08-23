@@ -11,8 +11,8 @@ import com.aradrotem.spendwise.data.repository.BudgetRepository
 import com.aradrotem.spendwise.data.repository.CategoryRepository
 import com.aradrotem.spendwise.data.repository.TransactionRepository
 import com.aradrotem.spendwise.ui.format.formatAmountInCents
-import com.aradrotem.spendwise.ui.format.hasTooManyDecimalPlaces
 import com.aradrotem.spendwise.ui.format.parseAmountToCents
+import com.aradrotem.spendwise.ui.format.validateAmount
 import com.aradrotem.spendwise.util.compareCategoryNames
 import com.aradrotem.spendwise.util.currentMonthRange
 import kotlinx.coroutines.flow.MutableStateFlow
@@ -88,13 +88,7 @@ class BudgetsViewModel(
         if (dialog.isSaving) return
 
         val amountInCents = parseAmountToCents(dialog.amountText)
-        val amountError = when {
-            dialog.amountText.isBlank() -> "Amount is required"
-            hasTooManyDecimalPlaces(dialog.amountText) -> "Enter an amount with up to 2 decimal places."
-            amountInCents == null -> "Enter a valid amount"
-            amountInCents <= 0L -> "Amount must be greater than zero"
-            else -> null
-        }
+        val amountError = validateAmount(dialog.amountText, amountInCents)
         val categoryError = if (dialog.categoryName == null) "Category is required" else null
 
         if (amountError != null || categoryError != null) {

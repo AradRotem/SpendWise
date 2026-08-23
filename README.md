@@ -83,13 +83,26 @@ The following features were part of the original SpendWise concept but are inten
 
 ### 1. Multi-Currency Support
 
-SpendWise v1 operates in Israeli Shekels (ILS / ₪) only — every transaction, budget, report, and shared expense is recorded and displayed in ILS, with no currency selection anywhere in the app. A future feature could add recording and analyzing transactions in multiple currencies. Possible future functionality may include:
+SpendWise v1 operates in Israeli Shekels (ILS / ₪) only — every transaction, budget, report, and shared expense is recorded and displayed in ILS, with no currency selection anywhere in the app. A future version may add support for recording and analyzing transactions in additional currencies, for example:
 
-* Selecting a currency for a transaction
-* Retrieving exchange rates from an external currency/exchange-rate API
-* Converting transactions into the user's main/default currency
+* USD — US Dollar
+* EUR — Euro
+* GBP — British Pound
+* and other currencies
+
+Possible future functionality may include:
+
+* Selecting a currency per transaction
+* Choosing a main/default (base) currency
+* Retrieving current exchange rates from an external exchange-rate service/API
+* Converting transactions into the user's chosen base currency
+* Preserving both the original amount/currency and the converted value
 * Showing converted totals in reports and analytics
+* Exchange-rate caching/offline behavior where appropriate
+* Synchronization of currency metadata between devices
 * Supporting shared-group expenses involving different currencies
+
+This entire item remains a **postponed, future-only** feature — no part of it is implemented in SpendWise v1.
 
 ### 2. Receipt Item Extraction & Price Tracking
 

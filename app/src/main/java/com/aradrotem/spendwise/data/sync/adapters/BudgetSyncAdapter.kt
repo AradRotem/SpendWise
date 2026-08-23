@@ -4,7 +4,6 @@ import com.aradrotem.spendwise.data.local.BudgetDao
 import com.aradrotem.spendwise.data.local.BudgetEntity
 import com.aradrotem.spendwise.data.sync.EntitySyncAdapter
 import com.aradrotem.spendwise.data.sync.SyncEntityType
-import kotlinx.coroutines.flow.first
 
 class BudgetSyncAdapter(private val dao: BudgetDao, uid: String) : EntitySyncAdapter<BudgetEntity> {
 
@@ -12,7 +11,7 @@ class BudgetSyncAdapter(private val dao: BudgetDao, uid: String) : EntitySyncAda
     override val collectionPath = "users/$uid/budgets"
 
     override suspend fun loadForPush(localId: Long): Map<String, Any?>? {
-        val budget = findById(localId) ?: return null
+        val budget = dao.getById(localId) ?: return null
         return mapOf("categoryName" to budget.categoryName, "monthlyLimitCents" to budget.monthlyLimitCents)
     }
 
@@ -34,8 +33,6 @@ class BudgetSyncAdapter(private val dao: BudgetDao, uid: String) : EntitySyncAda
     }
 
     override suspend fun applyRemoteDelete(localId: Long) {
-        findById(localId)?.let { dao.delete(it) }
+        dao.getById(localId)?.let { dao.delete(it) }
     }
-
-    private suspend fun findById(localId: Long): BudgetEntity? = dao.observeAll().first().firstOrNull { it.id == localId }
 }
