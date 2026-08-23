@@ -10,7 +10,6 @@ import com.aradrotem.spendwise.data.auth.FirebaseUnavailableUserProfileRepositor
 import com.aradrotem.spendwise.data.auth.FirestoreUserProfileRepository
 import com.aradrotem.spendwise.data.auth.UserProfileRepository
 import com.aradrotem.spendwise.data.local.SpendWiseDatabase
-import com.aradrotem.spendwise.data.network.ExchangeRateApiFactory
 import com.aradrotem.spendwise.data.notifications.NotificationCheckWorker
 import com.aradrotem.spendwise.data.notifications.NotificationChannels
 import com.aradrotem.spendwise.data.notifications.NotificationPreferencesStore
@@ -40,13 +39,11 @@ import com.google.firebase.auth.FirebaseAuth
 import com.google.firebase.firestore.FirebaseFirestore
 import com.aradrotem.spendwise.data.repository.BudgetRepository
 import com.aradrotem.spendwise.data.repository.CategoryRepository
-import com.aradrotem.spendwise.data.repository.ExchangeRateRepository
 import com.aradrotem.spendwise.data.repository.FirestoreGroupCloudRepository
 import com.aradrotem.spendwise.data.repository.GroupCloudRepository
 import com.aradrotem.spendwise.data.repository.GroupExpenseRepository
 import com.aradrotem.spendwise.data.repository.NotificationRepository
 import com.aradrotem.spendwise.data.repository.ReceiptRepository
-import com.aradrotem.spendwise.data.repository.RetrofitExchangeRateRepository
 import com.aradrotem.spendwise.data.repository.RecurringOccurrenceExceptionRepository
 import com.aradrotem.spendwise.data.repository.RecurringPaymentRepository
 import com.aradrotem.spendwise.data.repository.TransactionRepository
@@ -84,8 +81,6 @@ class RepositoryBundle(database: SpendWiseDatabase, context: android.content.Con
     )
     val notificationRepository: NotificationRepository = NotificationRepository(database.notificationStateDao())
     val notificationPreferencesStore: NotificationPreferencesStore = SharedPrefsNotificationPreferencesStore(context, uid)
-    val exchangeRateRepository: ExchangeRateRepository =
-        RetrofitExchangeRateRepository(ExchangeRateApiFactory.create(), database.cachedExchangeRateDao())
 
     // Null for the legacy/pre-auth database and for builds without google-services.json - real
     // shared groups are inherently cross-account and have no offline-only equivalent, same

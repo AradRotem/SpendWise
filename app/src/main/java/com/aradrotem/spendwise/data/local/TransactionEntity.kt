@@ -67,6 +67,10 @@ data class TransactionEntity(
     // existing query/report/budget calculation keeps working unchanged); these four fields are
     // purely a historical record of the original entry - never used to recompute amountInCents
     // later, so a transaction's displayed value never silently changes when today's rate moves.
+    //
+    // SpendWise v1 is ILS-only: the active currency-conversion feature was removed and no new
+    // transaction ever populates these fields again. Left in place, nullable, so pre-existing
+    // rows saved while the feature was active keep loading without a destructive migration.
     val originalAmountCents: Long? = null,
     // ISO 4217 currency code, e.g. "USD".
     val originalCurrencyCode: String? = null,

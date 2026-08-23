@@ -33,20 +33,7 @@ data class AddTransactionUiState(
     val receiptStoragePath: String? = null,
     val receiptRemoteUrl: String? = null,
     val isReceiptBusy: Boolean = false,
-    val receiptError: String? = null,
-
-    // Step 19: optional foreign-currency entry. When disabled, amountText is the base-currency
-    // amount exactly as before Step 19 - the streamlined default flow is unchanged. When enabled,
-    // foreignAmountText is what the user types and amountText is kept in sync as the converted
-    // base-currency preview (recomputed whenever the amount or the fetched rate changes).
-    val useForeignCurrency: Boolean = false,
-    val foreignCurrencyCode: String = "USD",
-    val foreignAmountText: String = "",
-    val isFetchingRate: Boolean = false,
-    val conversionRate: Double? = null,
-    val rateTimestampEpochMillis: Long? = null,
-    val rateIsFromCache: Boolean = false,
-    val rateError: String? = null
+    val receiptError: String? = null
 ) {
     val hasReceipt: Boolean get() = receiptLocalPath != null || receiptStoragePath != null
 }

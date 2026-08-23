@@ -22,6 +22,7 @@ The application allows users to record transactions, organize them by category, 
 * Modern user interface built with Jetpack Compose
 * Form validation for transaction input
 * Clean separation between the UI, data, and business logic layers
+* All amounts are in Israeli Shekels (₪) — SpendWise v1 is single-currency (ILS only)
 
 ## Planned Features
 
@@ -42,7 +43,7 @@ The following features were part of the original SpendWise concept but are inten
 
 ### 1. Multi-Currency Support
 
-A future feature for recording and analyzing transactions in multiple currencies. Possible future functionality may include:
+SpendWise v1 operates in Israeli Shekels (ILS / ₪) only — every transaction, budget, report, and shared expense is recorded and displayed in ILS, with no currency selection anywhere in the app. A future feature could add recording and analyzing transactions in multiple currencies. Possible future functionality may include:
 
 * Selecting a currency for a transaction
 * Retrieving exchange rates from an external currency/exchange-rate API
@@ -170,6 +171,8 @@ app/build/outputs/apk/debug/
 SpendWise is currently under active development.
 
 The basic transaction management system has been implemented, including local storage, transaction creation, and transaction list display. Additional budgeting, analytics, filtering, and visualization features are planned for future versions.
+
+SpendWise v1 operates in Israeli Shekels (ILS / ₪) only; multi-currency support is a postponed future feature (see Future Roadmap).
 
 ## Purpose
 

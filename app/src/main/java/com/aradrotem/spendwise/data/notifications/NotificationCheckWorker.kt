@@ -88,7 +88,7 @@ class NotificationCheckWorker(context: Context, params: WorkerParameters) : Coro
         return Result.success()
     }
 
-    private fun formatCents(cents: Long): String = "%d.%02d".format(cents / 100, cents % 100)
+    private fun formatCents(cents: Long): String = "₪%d.%02d".format(cents / 100, cents % 100)
 
     // Stable per-category/per-plan ids so a re-notification (a different threshold tier, or a
     // different month's reminder) creates a new notification rather than silently replacing one

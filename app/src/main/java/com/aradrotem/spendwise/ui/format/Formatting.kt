@@ -40,11 +40,11 @@ fun formatPeriodLabel(months: List<YearMonth>): String {
     }
 }
 
-// Formats cents as a decimal string without going through Double/Float.
+// Formats cents (agorot) as a decimal ILS string without going through Double/Float.
 fun formatAmountInCents(amountInCents: Long): String {
     val whole = amountInCents / 100
     val fraction = amountInCents % 100
-    return "%d.%02d".format(whole, fraction)
+    return "₪%d.%02d".format(whole, fraction)
 }
 
 // Shared building block for "<sign><magnitude>" displays (e.g. "+12.50", "-3.00", "12.50");
