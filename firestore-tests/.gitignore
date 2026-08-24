@@ -1,0 +1,9 @@
+node_modules/
+firestore-debug.log
+firebase-debug.log
+ui-debug.log
+
+# Copied in by the "pretest" npm script from the repo-root firestore.rules (the single source of
+# truth) so firebase.json can reference a rules file inside this project directory - never the
+# thing to edit or commit here.
+/firestore.rules

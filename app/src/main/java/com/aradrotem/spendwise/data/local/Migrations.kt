@@ -179,6 +179,31 @@ internal val builtInCategorySeeds = listOf(
     BuiltInCategorySeed("OTHER", "other", "INCOME")
 )
 
+// Fix for a real race in GroupExpenseRepository.getOrCreateLocalGroupForSync: overlapping Sync
+// passes (e.g. app resume, a manual "Sync now" tap, and GroupExpensesListScreen's own entry-point
+// sync all firing close together - each one via SpendWiseApplication.sharedGroupSyncEngine, a
+// computed property that hands out a BRAND NEW SharedGroupSyncEngine, and therefore a brand new
+// independent Mutex, on every access) could each find no existing local row for the same cloud
+// groupSyncId and insert their own, duplicating one shared group into multiple local rows. First,
+// de-duplicate any rows already created by that race - keeping the earliest (lowest id) row per
+// distinct non-null groupSyncId and letting its members/expenses/shares cascade-delete with it is
+// safe, since they're just redundant copies of what the next Sync re-pulls from Firestore into the
+// surviving row anyway. Purely-local groups (groupSyncId IS NULL) are never touched - SQLite's
+// UNIQUE index treats every NULL as distinct from every other NULL. Then add the unique index
+// itself, so the underlying race can never produce a duplicate again (see
+// GroupExpenseRepository.getOrCreateLocalGroupForSync's insert-conflict recovery).
+val MIGRATION_13_14: Migration = object : Migration(13, 14) {
+    override fun migrate(connection: SQLiteConnection) {
+        connection.execSQL(
+            "DELETE FROM `expense_groups` WHERE `groupSyncId` IS NOT NULL AND `id` NOT IN " +
+                "(SELECT MIN(`id`) FROM `expense_groups` WHERE `groupSyncId` IS NOT NULL GROUP BY `groupSyncId`)"
+        )
+        connection.execSQL(
+            "CREATE UNIQUE INDEX IF NOT EXISTS `index_expense_groups_groupSyncId` ON `expense_groups` (`groupSyncId`)"
+        )
+    }
+}
+
 val MIGRATION_1_2: Migration = object : Migration(1, 2) {
     override fun migrate(connection: SQLiteConnection) {
         connection.execSQL(

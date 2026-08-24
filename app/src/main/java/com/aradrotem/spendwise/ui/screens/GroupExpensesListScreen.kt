@@ -57,7 +57,9 @@ fun GroupExpensesListScreen(
     modifier: Modifier = Modifier,
     viewModel: GroupsListViewModel = viewModel(
         factory = GroupsListViewModel.factory(
-            (LocalContext.current.applicationContext as SpendWiseApplication).repositories.groupExpenseRepository
+            (LocalContext.current.applicationContext as SpendWiseApplication).repositories.groupExpenseRepository,
+            (LocalContext.current.applicationContext as SpendWiseApplication).repositories.groupCloudRepository,
+            (LocalContext.current.applicationContext as SpendWiseApplication).authRepository
         )
     ),
     app: SpendWiseApplication = LocalContext.current.applicationContext as SpendWiseApplication,
@@ -102,7 +104,11 @@ fun GroupExpensesListScreen(
                 contentAlignment = Alignment.Center
             ) { CircularProgressIndicator() }
 
-            uiState.items.isEmpty() && invitationsUiState.invitations.isEmpty() -> Box(
+            // A failed invitations listener must never look identical to "genuinely no
+            // invitations" - see IncomingInvitationsUiState.loadError - so it also routes to the
+            // LazyColumn branch below (which surfaces the error) rather than this plain empty
+            // placeholder, even when there are no local groups either.
+            uiState.items.isEmpty() && invitationsUiState.invitations.isEmpty() && invitationsUiState.loadError == null -> Box(
                 modifier = Modifier.padding(innerPadding).fillMaxSize(),
                 contentAlignment = Alignment.Center
             ) { EmptyGroupsState(onAddGroup) }
@@ -115,10 +121,11 @@ fun GroupExpensesListScreen(
                 contentPadding = PaddingValues(start = 16.dp, end = 16.dp, top = 16.dp, bottom = 96.dp),
                 verticalArrangement = Arrangement.spacedBy(12.dp)
             ) {
-                if (invitationsUiState.invitations.isNotEmpty()) {
+                if (invitationsUiState.invitations.isNotEmpty() || invitationsUiState.loadError != null) {
                     item {
                         PendingInvitationsSection(
                             invitations = invitationsUiState.invitations,
+                            loadError = invitationsUiState.loadError,
                             actionError = invitationsUiState.actionError,
                             onAccept = invitationsViewModel::accept,
                             onDecline = invitationsViewModel::decline
@@ -158,6 +165,7 @@ fun GroupExpensesListScreen(
 @Composable
 private fun PendingInvitationsSection(
     invitations: List<GroupInvitation>,
+    loadError: String?,
     actionError: String?,
     onAccept: (GroupInvitation) -> Unit,
     onDecline: (GroupInvitation) -> Unit
@@ -166,6 +174,9 @@ private fun PendingInvitationsSection(
 
     Column(verticalArrangement = Arrangement.spacedBy(8.dp)) {
         Text("Pending invitations", style = MaterialTheme.typography.titleMedium)
+        // A failed listener must be visible, not indistinguishable from "you have none" - see
+        // IncomingInvitationsUiState.loadError.
+        loadError?.let { Text(it, color = MaterialTheme.colorScheme.error, style = MaterialTheme.typography.bodySmall) }
         // Previously silently dropped: an accept/decline failure (e.g. a permission error) left
         // the user with zero feedback and an invitation that just never resolved.
         actionError?.let { Text(it, color = MaterialTheme.colorScheme.error, style = MaterialTheme.typography.bodySmall) }

@@ -4,10 +4,12 @@ import androidx.lifecycle.ViewModel
 import androidx.lifecycle.viewModelScope
 import androidx.lifecycle.viewmodel.initializer
 import androidx.lifecycle.viewmodel.viewModelFactory
+import com.aradrotem.spendwise.data.auth.AuthRepository
 import com.aradrotem.spendwise.data.local.ExpenseGroupEntity
 import com.aradrotem.spendwise.data.local.GroupExpenseEntity
 import com.aradrotem.spendwise.data.local.GroupExpenseShareEntity
 import com.aradrotem.spendwise.data.local.GroupMemberEntity
+import com.aradrotem.spendwise.data.repository.GroupCloudRepository
 import com.aradrotem.spendwise.data.repository.GroupExpenseRepository
 import com.aradrotem.spendwise.domain.GroupBalanceCalculator
 import com.aradrotem.spendwise.domain.GroupExpenseForBalance
@@ -19,7 +21,9 @@ import kotlinx.coroutines.flow.stateIn
 import kotlinx.coroutines.launch
 
 class GroupsListViewModel(
-    private val repository: GroupExpenseRepository
+    private val repository: GroupExpenseRepository,
+    private val groupCloudRepository: GroupCloudRepository? = null,
+    private val authRepository: AuthRepository? = null
 ) : ViewModel() {
 
     // All members/expenses/shares are loaded globally (not per-group) so every group's summary
@@ -39,13 +43,31 @@ class GroupsListViewModel(
         initialValue = GroupsListUiState(isLoading = true)
     )
 
+    // Step 20 fix: deleting a shared group locally used to only touch Room - the cloud's canonical
+    // groups/{groupId} doc (and this account's users/{uid}/groupMemberships/{groupId} discovery-
+    // index doc) were left untouched, so the very next Sync rediscovered the "deleted" group via
+    // SharedGroupSyncEngine.syncAll's getMyMemberships and recreated it locally. The cloud side is
+    // torn down FIRST (best-effort - see GroupCloudRepository.deleteSharedGroup for the owner vs.
+    // member split) so a group that's gone from the cloud can never be resurrected by the local
+    // delete that follows.
     fun onDeleteGroup(group: ExpenseGroupEntity) {
-        viewModelScope.launch { repository.deleteGroup(group) }
+        viewModelScope.launch {
+            val syncId = group.groupSyncId
+            val uid = authRepository?.currentUid
+            if (syncId != null && groupCloudRepository != null && uid != null) {
+                groupCloudRepository.deleteSharedGroup(syncId, uid)
+            }
+            repository.deleteGroup(group)
+        }
     }
 
     companion object {
-        fun factory(repository: GroupExpenseRepository) = viewModelFactory {
-            initializer { GroupsListViewModel(repository) }
+        fun factory(
+            repository: GroupExpenseRepository,
+            groupCloudRepository: GroupCloudRepository? = null,
+            authRepository: AuthRepository? = null
+        ) = viewModelFactory {
+            initializer { GroupsListViewModel(repository, groupCloudRepository, authRepository) }
         }
     }
 }

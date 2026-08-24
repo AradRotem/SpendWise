@@ -45,6 +45,8 @@ import com.aradrotem.spendwise.R
 import com.aradrotem.spendwise.SpendWiseApplication
 import com.aradrotem.spendwise.data.local.GroupExpenseEntity
 import com.aradrotem.spendwise.data.local.GroupSplitMethod
+import com.aradrotem.spendwise.domain.GroupInvitation
+import com.aradrotem.spendwise.domain.GroupInvitationStatus
 import com.aradrotem.spendwise.ui.format.formatAmountInCents
 import com.aradrotem.spendwise.ui.format.formatDate
 import java.time.LocalDate
@@ -163,6 +165,7 @@ fun GroupDetailsScreen(
         InviteByEmailDialog(
             uiState = sharingUiState,
             onInvite = sharingViewModel::inviteByEmail,
+            onCancelInvite = sharingViewModel::cancelInvitation,
             onDismiss = {
                 showInviteDialog = false
                 sharingViewModel.dismissMessage()
@@ -193,7 +196,12 @@ fun GroupDetailsScreen(
 // GroupSharingViewModel.inviteByEmail the first time this is used - nothing here needs to know
 // whether the group was already shared.
 @Composable
-private fun InviteByEmailDialog(uiState: GroupSharingUiState, onInvite: (String) -> Unit, onDismiss: () -> Unit) {
+private fun InviteByEmailDialog(
+    uiState: GroupSharingUiState,
+    onInvite: (String) -> Unit,
+    onCancelInvite: (GroupInvitation) -> Unit,
+    onDismiss: () -> Unit
+) {
     var email by remember { mutableStateOf("") }
 
     AlertDialog(
@@ -213,7 +221,16 @@ private fun InviteByEmailDialog(uiState: GroupSharingUiState, onInvite: (String)
                 if (uiState.sentInvitations.isNotEmpty()) {
                     Text("Already invited:", style = MaterialTheme.typography.labelMedium)
                     uiState.sentInvitations.forEach { invitation ->
-                        Text("${invitation.inviteeEmail} — ${invitation.status}", style = MaterialTheme.typography.bodySmall)
+                        Row(modifier = Modifier.fillMaxWidth(), verticalAlignment = Alignment.CenterVertically) {
+                            Text(
+                                "${invitation.inviteeEmail} — ${invitation.status}",
+                                style = MaterialTheme.typography.bodySmall,
+                                modifier = Modifier.weight(1f)
+                            )
+                            if (invitation.status == GroupInvitationStatus.PENDING) {
+                                TextButton(onClick = { onCancelInvite(invitation) }) { Text("Cancel invite") }
+                            }
+                        }
                     }
                 }
             }

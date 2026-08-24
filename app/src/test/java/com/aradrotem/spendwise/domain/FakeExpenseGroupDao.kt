@@ -9,7 +9,13 @@ class FakeExpenseGroupDao : ExpenseGroupDao {
     private val rows = mutableListOf<ExpenseGroupEntity>()
     private var nextId = 1L
 
+    // Mirrors the real UNIQUE index on expense_groups.groupSyncId (see MIGRATION_13_14) - lets
+    // tests exercise GroupExpenseRepository.getOrCreateLocalGroupForSync's insert-conflict
+    // recovery path the same way the real database's constraint would trigger it.
     override suspend fun insert(group: ExpenseGroupEntity): Long {
+        if (group.groupSyncId != null && rows.any { it.groupSyncId == group.groupSyncId }) {
+            throw IllegalStateException("UNIQUE constraint failed: expense_groups.groupSyncId")
+        }
         val withId = group.copy(id = nextId++)
         rows += withId
         return withId.id

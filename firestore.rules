@@ -58,6 +58,12 @@ rules_version = '2';
 //    ordering this depends on.
 //  - No group data can be enumerated by a non-member: reads always require isGroupMember(groupId)
 //    (or, for invitations, being the addressed invitee).
+//  - The nested .../invitations/{invitationId} rule below authorizes get() and a collection()
+//    query scoped to one group, but NOT a collectionGroup("invitations") query across every group
+//    (Firestore requires a separate {path=**} rule for that, even for an identical document path) -
+//    see the top-level match /{path=**}/invitations/{invitationId} block, which is what actually
+//    authorizes FirestoreGroupCloudRepository.observeIncomingInvitations for an invitee who isn't a
+//    group member yet. Verified against the Firestore emulator - see firestore-tests/.
 service cloud.firestore {
   match /databases/{database}/documents {
 
@@ -161,6 +167,25 @@ service cloud.firestore {
           request.resource.data.groupName == resource.data.groupName;
         allow delete: if isGroupOwner(groupId);
       }
+    }
+
+    // A nested match under /groups/{groupId}/invitations/{invitationId} (above) authorizes get()
+    // and a collection() query SCOPED to one group's own invitations subcollection, but Firestore
+    // does NOT extend that same nested rule to a collectionGroup("invitations") query across every
+    // group - a collection-group query is only authorized by a rule declared with the recursive
+    // wildcard {path=**}, even when the resulting document's real path is identical. Verified
+    // empirically against the Firestore emulator: with only the nested rule above, a matching
+    // invitee's get() on their own invitation succeeds but the exact same document read through
+    // observeIncomingInvitations' collectionGroup query is denied with "No matching allow
+    // statements" - this is what actually caused the real PERMISSION_DENIED bug (an invited user,
+    // not yet a group member, could never load their own pending invitations). Re-declared here,
+    // read-only and restricted to the exact same invitee-email-match condition as the nested rule
+    // above - group members' isGroupMember access to sent invitations continues to go through the
+    // regular (non-collection-group) observeSentInvitations query, which the nested rule above
+    // already covers, so this never needs to (and cannot, since {path=**} loses the groupId
+    // binding) duplicate that branch.
+    match /{path=**}/invitations/{invitationId} {
+      allow list: if isSignedIn() && resource.data.inviteeEmail == request.auth.token.email.lower();
     }
 
     // Step 19's users/{uid}/groupMemberships/{groupId} index (used by

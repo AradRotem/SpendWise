@@ -10,6 +10,8 @@ import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.padding
+import androidx.compose.foundation.rememberScrollState
+import androidx.compose.foundation.verticalScroll
 import androidx.compose.material3.HorizontalDivider
 import androidx.compose.material3.ListItem
 import androidx.compose.material3.MaterialTheme
@@ -43,7 +45,17 @@ fun SettingsScreen(
         )
     )
 ) {
-    Column(modifier = modifier.fillMaxSize()) {
+    // Settings is the only bottom-nav destination that keeps the global "Add transaction" FAB
+    // visible (see NavigationVisibility.isFabVisible) while also being long enough to need
+    // scrolling, so the bottom padding below is what keeps the last notification row from being
+    // covered by that floating FAB - a plain fillMaxSize Column has no scroll of its own and would
+    // otherwise just clip the lower notification toggles off-screen entirely.
+    Column(
+        modifier = modifier
+            .fillMaxSize()
+            .verticalScroll(rememberScrollState())
+            .padding(bottom = 88.dp)
+    ) {
         Text(text = "Settings", style = MaterialTheme.typography.headlineSmall, modifier = Modifier.padding(16.dp))
         HorizontalDivider()
         ListItem(

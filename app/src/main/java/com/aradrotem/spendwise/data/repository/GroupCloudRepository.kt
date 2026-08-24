@@ -5,6 +5,27 @@ import com.aradrotem.spendwise.domain.GroupInvitation
 import com.aradrotem.spendwise.domain.RemoteGroupExpense
 import kotlinx.coroutines.flow.Flow
 
+// A Firebase-free classification of why observeIncomingInvitations' live listener failed - lets
+// IncomingInvitationsViewModel distinguish failure classes (and show a message that actually helps
+// diagnose the problem) without importing any Firebase type itself, preserving the same isolation
+// rule AuthRepository documents for FirebaseAuth: only FirestoreGroupCloudRepository may touch the
+// Firebase SDK directly. See FirestoreGroupCloudRepository.observeIncomingInvitations for how a
+// real FirebaseFirestoreException.Code is mapped into one of these.
+sealed class IncomingInvitationsLoadError(message: String) : Exception(message) {
+    // The collection-group query's required composite index isn't usable right now - either still
+    // building right after a fresh deploy, or missing/not yet deployed (see firestore.indexes.json,
+    // and note collection-group queries are never auto-indexed by Firestore, even for pure equality
+    // filters like this one).
+    class IndexUnavailable(message: String) : IncomingInvitationsLoadError(message)
+
+    // Firestore rejected the read outright - most often the live security rules are stale relative
+    // to firestore.rules (missing the invitee-email-match branch or its .lower() normalization), or
+    // the signed-in account's ID token doesn't carry the email claim this rule needs.
+    class PermissionDenied(message: String) : IncomingInvitationsLoadError(message)
+
+    class Other(message: String) : IncomingInvitationsLoadError(message)
+}
+
 data class GroupCloudMember(
     val uid: String,
     val displayName: String,
@@ -33,6 +54,15 @@ interface GroupCloudRepository {
     // ExpenseGroupEntity.groupSyncId; nothing here touches local Room.
     suspend fun createSharedGroup(groupName: String, ownerUid: String, ownerDisplayName: String, ownerEmail: String): Result<String>
 
+    // Called when [uid] deletes a shared group locally (see GroupsListViewModel.onDeleteGroup).
+    // Always removes the caller's OWN users/{uid}/groupMemberships/{groupId} discovery-index doc -
+    // this is what stops SharedGroupSyncEngine.syncAll's getMyMemberships from resurrecting the
+    // group on this account's next sync, regardless of role. If [uid] is the group's owner, also
+    // tears down the group doc itself plus its members/invitations/expenses subcollections (a
+    // non-owner's attempt at that part is simply rejected by Firestore rules and ignored - their
+    // own membership-index removal still goes through).
+    suspend fun deleteSharedGroup(groupId: String, uid: String): Result<Unit>
+
     suspend fun sendInvitation(groupId: String, groupName: String, inviterUid: String, inviterEmail: String, inviteeEmail: String): Result<Unit>
 
     fun observeIncomingInvitations(email: String): Flow<List<GroupInvitation>>
@@ -40,6 +70,7 @@ interface GroupCloudRepository {
 
     suspend fun acceptInvitation(invitation: GroupInvitation, uid: String, displayName: String, email: String): Result<Unit>
     suspend fun declineInvitation(invitation: GroupInvitation): Result<Unit>
+    suspend fun cancelInvitation(invitation: GroupInvitation): Result<Unit>
 
     fun observeMembers(groupId: String): Flow<List<GroupCloudMember>>
     suspend fun removeMember(groupId: String, uid: String): Result<Unit>

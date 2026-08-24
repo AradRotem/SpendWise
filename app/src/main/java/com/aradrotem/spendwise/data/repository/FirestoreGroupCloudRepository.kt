@@ -9,6 +9,7 @@ import com.aradrotem.spendwise.domain.RemoteGroupExpense
 import com.google.firebase.firestore.DocumentSnapshot
 import com.google.firebase.firestore.FieldValue
 import com.google.firebase.firestore.FirebaseFirestore
+import com.google.firebase.firestore.FirebaseFirestoreException
 import kotlinx.coroutines.channels.awaitClose
 import kotlinx.coroutines.flow.Flow
 import kotlinx.coroutines.flow.callbackFlow
@@ -66,6 +67,36 @@ class FirestoreGroupCloudRepository(private val firestore: FirebaseFirestore) : 
         groupId
     }.onFailure { Log.w(TAG, "createSharedGroup failed", it) }
 
+    // See GroupCloudRepository.deleteSharedGroup for the split responsibility this implements.
+    // Ordering within the owner-only teardown matters: every one of those deletes is gated by
+    // firestore.rules' isGroupOwner(groupId), which checks THIS caller's own
+    // groups/{groupId}/members/{uid} doc still exists - so that doc (and the rest of the members
+    // subcollection) must be the LAST thing deleted, after the group doc itself and every other
+    // subcollection, or each later delete would start failing its own permission check against a
+    // group the caller no longer "owns" by the time it runs.
+    override suspend fun deleteSharedGroup(groupId: String, uid: String): Result<Unit> = runCatching {
+        runCatching {
+            groupDoc(groupId).delete().await()
+            deleteAllDocsIn(invitationsCollection(groupId))
+            deleteAllDocsIn(expensesCollection(groupId))
+            deleteAllDocsIn(membersCollection(groupId))
+        }.onFailure { Log.d(TAG, "deleteSharedGroup($groupId): owner-only teardown skipped/failed (likely not the owner): ${it.message}") }
+
+        // Always removed regardless of the above: this is the caller's own subtree, and it's what
+        // actually stops SharedGroupSyncEngine.syncAll's getMyMemberships from resurrecting the
+        // group on this account's next sync - see the "deleted group comes back" bug this fixes.
+        membershipDoc(uid, groupId).delete().await()
+        Unit
+    }.onFailure { Log.w(TAG, "deleteSharedGroup($groupId) failed", it) }
+
+    private suspend fun deleteAllDocsIn(collection: com.google.firebase.firestore.CollectionReference) {
+        val snapshot = collection.get().await()
+        if (snapshot.isEmpty) return
+        val batch = firestore.batch()
+        snapshot.documents.forEach { batch.delete(it.reference) }
+        batch.commit().await()
+    }
+
     override suspend fun sendInvitation(groupId: String, groupName: String, inviterUid: String, inviterEmail: String, inviteeEmail: String): Result<Unit> = runCatching {
         val invitationRef = invitationsCollection(groupId).document()
         invitationRef.set(
@@ -97,10 +128,17 @@ class FirestoreGroupCloudRepository(private val firestore: FirebaseFirestore) : 
                 // here - the SDK simply omits any document the caller isn't authorized to read
                 // from the results (unlike a get() on one specific doc, which does throw). So an
                 // empty result set here can mean "genuinely no pending invitations" OR "a rule
-                // mismatch is silently excluding real ones" (see firestore.rules' .lower() note) -
-                // this log is the only signal that distinguishes a real listener error from that.
+                // mismatch is silently excluding real ones" (see firestore.rules' .lower() note).
+                // A real listener error (this `error != null` branch - e.g. an index that isn't
+                // deployed yet, or an actual permission/network failure) is different: it must
+                // reach the collector as a failure, not be swallowed into an empty list the same
+                // way as "no invitations". Firestore itself has already torn the listener down by
+                // the time this fires for a non-transient error, so closing the Flow here (rather
+                // than trySend-ing empty and continuing) matches the listener's real lifecycle.
                 if (error != null) {
                     Log.w(TAG, "observeIncomingInvitations listener error: ${error.code}", error)
+                    close(error.toIncomingInvitationsLoadError())
+                    return@addSnapshotListener
                 }
                 val count = snapshot?.documents?.size ?: 0
                 Log.d(TAG, "observeIncomingInvitations: snapshot has $count invitation doc(s)")
@@ -108,6 +146,20 @@ class FirestoreGroupCloudRepository(private val firestore: FirebaseFirestore) : 
             }
         awaitClose { registration.remove() }
     }
+
+    // FAILED_PRECONDITION is Firestore's code for "this query needs an index that isn't ready" -
+    // its message always includes a console link to create/inspect it, which is worth keeping in
+    // the wrapped message for anyone reading Logcat. PERMISSION_DENIED means the security rules
+    // rejected the read outright (see IncomingInvitationsLoadError's own doc for what that usually
+    // means in practice for this specific query).
+    private fun FirebaseFirestoreException.toIncomingInvitationsLoadError(): IncomingInvitationsLoadError =
+        when (code) {
+            FirebaseFirestoreException.Code.FAILED_PRECONDITION ->
+                IncomingInvitationsLoadError.IndexUnavailable(message ?: code.name)
+            FirebaseFirestoreException.Code.PERMISSION_DENIED ->
+                IncomingInvitationsLoadError.PermissionDenied(message ?: code.name)
+            else -> IncomingInvitationsLoadError.Other(message ?: code.name)
+        }
 
     override fun observeSentInvitations(groupId: String): Flow<List<GroupInvitation>> = callbackFlow {
         val registration = invitationsCollection(groupId).addSnapshotListener { snapshot, error ->
@@ -149,6 +201,17 @@ class FirestoreGroupCloudRepository(private val firestore: FirebaseFirestore) : 
             .update(mapOf("status" to GroupInvitationStatus.DECLINED.name, "respondedAt" to FieldValue.serverTimestamp()))
             .await()
     }
+
+    // Owner-only action (enforced by firestore.rules) and only valid while the invitation is
+    // still PENDING - marks it CANCELLED rather than deleting the doc so the invitee's client (if
+    // it already loaded the invitation) sees it disappear from their pending list via the same
+    // status-filtered observeIncomingInvitations query, exactly like a decline.
+    override suspend fun cancelInvitation(invitation: GroupInvitation): Result<Unit> = runCatching {
+        invitationsCollection(invitation.groupId).document(invitation.id)
+            .update(mapOf("status" to GroupInvitationStatus.CANCELLED.name, "respondedAt" to FieldValue.serverTimestamp()))
+            .await()
+        Unit
+    }.onFailure { Log.w(TAG, "cancelInvitation failed for invitation ${invitation.id}", it) }
 
     override fun observeMembers(groupId: String): Flow<List<GroupCloudMember>> = callbackFlow {
         val registration = membersCollection(groupId).addSnapshotListener { snapshot, error ->

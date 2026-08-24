@@ -1,9 +1,14 @@
 package com.aradrotem.spendwise.ui.screens
 
+import androidx.compose.foundation.layout.Box
+import androidx.compose.foundation.layout.height
+import androidx.compose.ui.Modifier
 import androidx.compose.ui.test.assertIsDisplayed
 import androidx.compose.ui.test.junit4.createComposeRule
 import androidx.compose.ui.test.onNodeWithText
 import androidx.compose.ui.test.performClick
+import androidx.compose.ui.test.performScrollTo
+import androidx.compose.ui.unit.dp
 import androidx.test.ext.junit.runners.AndroidJUnit4
 import org.junit.Assert.assertEquals
 import org.junit.Assert.assertThrows
@@ -55,5 +60,26 @@ class SettingsScreenTest {
         composeRule.onNodeWithText("Reports & analytics").performClick()
 
         assertEquals(true, invoked)
+    }
+
+    // Regression test: the Settings screen used a plain fillMaxSize Column with no scroll modifier,
+    // so on a short viewport the lower notification rows (in particular "Shared-group
+    // notifications", the last one) were clipped off-screen and unreachable - see SettingsScreen's
+    // verticalScroll fix. A fixed small-height Box stands in for a short/constrained device screen.
+    @Test
+    fun lastNotificationSetting_isReachableByScrollingOnAShortScreen() {
+        composeRule.setContent {
+            Box(modifier = Modifier.height(400.dp)) {
+                SettingsScreen(
+                    onNavigateToCategories = {},
+                    onNavigateToRecurringPayments = {},
+                    onNavigateToReportsAnalytics = {},
+                    onNavigateToGroupExpenses = {},
+                    onNavigateToAccount = {}
+                )
+            }
+        }
+
+        composeRule.onNodeWithText("Shared-group notifications").performScrollTo().assertIsDisplayed()
     }
 }

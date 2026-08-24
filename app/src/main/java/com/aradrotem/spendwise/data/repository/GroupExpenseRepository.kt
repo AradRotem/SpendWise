@@ -16,6 +16,7 @@ import com.aradrotem.spendwise.data.sync.SyncMetadataDao
 import com.aradrotem.spendwise.data.sync.SyncStamper
 import com.aradrotem.spendwise.domain.ReconciledExpense
 import com.aradrotem.spendwise.domain.RemoteGroupExpense
+import kotlinx.coroutines.CancellationException
 import kotlinx.coroutines.flow.Flow
 
 // Wraps the three closely-coupled group-expense DAOs (a group's members, expenses and shares are
@@ -243,13 +244,27 @@ class GroupExpenseRepository(
     // Finds the local mirror row for a shared group discovered via
     // users/{uid}/groupMemberships, or creates one if this is the first time this device has
     // heard of it (e.g. membership was accepted on a different device). Never creates a second
-    // local row for a groupSyncId that already has one.
+    // local row for a groupSyncId that already has one - even across two overlapping Sync passes
+    // that both see no existing row here before either has inserted (a real race, since
+    // SpendWiseApplication.sharedGroupSyncEngine hands out a brand new SharedGroupSyncEngine, and
+    // therefore a brand new independent Mutex, on every access - resume, connectivity-regained, a
+    // manual "Sync now", and Group-Details/Groups-list screen entry can all be in flight at once).
+    // The check-then-insert below is only the fast path; expense_groups.groupSyncId also carries a
+    // UNIQUE index (see MIGRATION_13_14/ExpenseGroupEntity), so the race's loser gets its insert
+    // rejected rather than silently creating a duplicate, and recovers by returning the winner's id
+    // instead of its own.
     suspend fun getOrCreateLocalGroupForSync(groupSyncId: String, groupName: String): Long {
         val existing = groupDao.getByGroupSyncId(groupSyncId)
         if (existing != null) return existing.id
-        val groupId = groupDao.insert(ExpenseGroupEntity(name = groupName, groupSyncId = groupSyncId))
-        groupSyncStamper.markDirty(groupId)
-        return groupId
+        return try {
+            val groupId = groupDao.insert(ExpenseGroupEntity(name = groupName, groupSyncId = groupSyncId))
+            groupSyncStamper.markDirty(groupId)
+            groupId
+        } catch (cancellation: CancellationException) {
+            throw cancellation
+        } catch (e: Exception) {
+            groupDao.getByGroupSyncId(groupSyncId)?.id ?: throw e
+        }
     }
 
     // Inserts or updates the local member row for one authenticated cloud member, keyed by

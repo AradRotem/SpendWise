@@ -1,9 +1,16 @@
 package com.aradrotem.spendwise.data.local
 
 import androidx.room.Entity
+import androidx.room.Index
 import androidx.room.PrimaryKey
 
-@Entity(tableName = "expense_groups")
+// The groupSyncId index is UNIQUE (added in MIGRATION_13_14) - the stable cloud identity a shared
+// group's local row is keyed by, so at most one local row may ever mirror one Firestore
+// groups/{groupId} doc. See GroupExpenseRepository.getOrCreateLocalGroupForSync for why this must
+// be enforced at the database level, not just checked in application code: two overlapping Sync
+// passes both racing to look up "does a local row for this groupSyncId already exist?" before
+// either has inserted one is a real, previously-unguarded race that produced duplicate groups.
+@Entity(tableName = "expense_groups", indices = [Index(value = ["groupSyncId"], unique = true)])
 data class ExpenseGroupEntity(
     @PrimaryKey(autoGenerate = true) val id: Long = 0,
     val name: String,

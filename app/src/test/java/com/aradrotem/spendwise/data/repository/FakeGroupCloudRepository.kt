@@ -7,6 +7,8 @@ import com.aradrotem.spendwise.domain.RemoteGroupExpense
 import kotlinx.coroutines.flow.Flow
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.asStateFlow
+import kotlinx.coroutines.flow.flow
+import kotlinx.coroutines.flow.map
 
 // In-memory GroupCloudRepository test double - lets ViewModel tests exercise the invite/accept/
 // decline flow with no live Firestore involved, same style as FakeAuthRepository.
@@ -29,6 +31,24 @@ class FakeGroupCloudRepository : GroupCloudRepository {
         return Result.success(groupId)
     }
 
+    // Mirrors FirestoreGroupCloudRepository.deleteSharedGroup's split responsibility: the group is
+    // only ever fully torn down (removed from `groups`/`members`/`expenses`, invitations dropped)
+    // when [uid] is the owner; either way, [uid]'s own membership row is removed - since this fake
+    // derives "my memberships" (getMyMemberships) directly from having a row in members[groupId],
+    // that alone is what a re-sync would use to decide the group no longer belongs to [uid].
+    override suspend fun deleteSharedGroup(groupId: String, uid: String): Result<Unit> {
+        val isOwner = groups[groupId]?.second == uid
+        if (isOwner) {
+            groups.remove(groupId)
+            members.remove(groupId)
+            expenses.remove(groupId)
+            invitationsState.value = invitationsState.value.filterNot { it.groupId == groupId }
+        } else {
+            members[groupId]?.removeAll { it.uid == uid }
+        }
+        return Result.success(Unit)
+    }
+
     override suspend fun sendInvitation(groupId: String, groupName: String, inviterUid: String, inviterEmail: String, inviteeEmail: String): Result<Unit> {
         if (sendInvitationResult.isSuccess) {
             invitationsState.value = invitationsState.value + GroupInvitation(
@@ -40,11 +60,29 @@ class FakeGroupCloudRepository : GroupCloudRepository {
         return sendInvitationResult
     }
 
-    override fun observeIncomingInvitations(email: String): Flow<List<GroupInvitation>> =
-        MutableStateFlow(invitationsState.value.filter { it.inviteeEmail == email.trim().lowercase() && it.status == GroupInvitationStatus.PENDING }).asStateFlow()
+    // Counts calls (not collections) - lets a test assert whether a ViewModel's flatMapLatest
+    // actually re-subscribed (tore down and recreated the "listener") or not, e.g. when guarding
+    // against redundant AuthStateListener re-fires for the same user (see
+    // IncomingInvitationsViewModel's distinctUntilChanged).
+    var observeIncomingInvitationsCallCount = 0
+        private set
+
+    // When set, observeIncomingInvitations throws this instead of returning data - simulates a
+    // real Firestore listener error (see FirestoreGroupCloudRepository's close(error)) so
+    // IncomingInvitationsViewModel's error handling can be tested without a live Firestore.
+    var observeIncomingInvitationsError: Throwable? = null
+
+    // Both derive from the same live invitationsState via .map (not a one-off snapshot copy), so a
+    // later change - e.g. cancelInvitation - is reflected to any existing collector, mirroring
+    // FirestoreGroupCloudRepository's real snapshot listeners.
+    override fun observeIncomingInvitations(email: String): Flow<List<GroupInvitation>> {
+        observeIncomingInvitationsCallCount++
+        observeIncomingInvitationsError?.let { return flow { throw it } }
+        return invitationsState.map { list -> list.filter { it.inviteeEmail == email.trim().lowercase() && it.status == GroupInvitationStatus.PENDING } }
+    }
 
     override fun observeSentInvitations(groupId: String): Flow<List<GroupInvitation>> =
-        MutableStateFlow(invitationsState.value.filter { it.groupId == groupId }).asStateFlow()
+        invitationsState.map { list -> list.filter { it.groupId == groupId } }
 
     override suspend fun acceptInvitation(invitation: GroupInvitation, uid: String, displayName: String, email: String): Result<Unit> {
         if (acceptInvitationResult.isSuccess) {
@@ -61,6 +99,17 @@ class FakeGroupCloudRepository : GroupCloudRepository {
             if (it.id == invitation.id) it.copy(status = GroupInvitationStatus.DECLINED) else it
         }
         return Result.success(Unit)
+    }
+
+    var cancelInvitationResult: Result<Unit> = Result.success(Unit)
+
+    override suspend fun cancelInvitation(invitation: GroupInvitation): Result<Unit> {
+        if (cancelInvitationResult.isSuccess) {
+            invitationsState.value = invitationsState.value.map {
+                if (it.id == invitation.id) it.copy(status = GroupInvitationStatus.CANCELLED) else it
+            }
+        }
+        return cancelInvitationResult
     }
 
     override fun observeMembers(groupId: String): Flow<List<GroupCloudMember>> =

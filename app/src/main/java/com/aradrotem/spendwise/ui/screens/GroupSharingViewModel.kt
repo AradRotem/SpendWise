@@ -128,6 +128,18 @@ class GroupSharingViewModel(
         }
     }
 
+    // Owner-side cancel of a still-pending invitation (see GroupCloudRepository.cancelInvitation).
+    // No local state update needed here: uiState.sentInvitations already flows live from
+    // observeSentInvitations, so a successful cancel is reflected as soon as Firestore's listener
+    // fires with the updated status.
+    fun cancelInvitation(invitation: GroupInvitation) {
+        val cloudRepository = groupCloudRepository ?: return
+        viewModelScope.launch {
+            cloudRepository.cancelInvitation(invitation)
+                .onFailure { messages.value = "Could not cancel the invitation. Please try again." to null }
+        }
+    }
+
     fun dismissMessage() {
         messages.value = null to null
     }
